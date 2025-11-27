@@ -1,0 +1,22 @@
+﻿{
+  "name": "papamica-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Papamica Restaurant LINE Webhook Gateway",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "tail": "wrangler tail"
+  },
+  "dependencies": {
+    "@line/bot-sdk": "^10.2.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.28.1"
+  },
+  "keywords": ["line", "webhook", "gateway", "cloudflare-workers"],
+  "author": "Papamica Restaurant",
+  "license": "MIT"
+}

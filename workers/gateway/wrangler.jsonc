@@ -1,0 +1,17 @@
+﻿{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "papamica-gateway",
+  "main": "src/index.js",
+  "compatibility_date": "2025-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "unagi-chatbot-db",
+      "database_id": "3d7a0fdb-03f2-4b11-a114-48665d9d3cfd"
+    }
+  ]
+}

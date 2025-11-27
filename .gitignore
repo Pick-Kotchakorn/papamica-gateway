@@ -1,0 +1,11 @@
+﻿# Secrets & local config
+mySecretToken123.txt
+secrets_backup/
+yondaimebot-dailogflow-a93b376433e6.json
+*.key
+*.pem
+.env
+.vscode/
+node_modules/
+dist/
+.DS_Store

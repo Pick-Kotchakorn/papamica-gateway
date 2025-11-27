@@ -1,0 +1,24 @@
+﻿{
+  "name": "papamica-main-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Papamica Restaurant LINE Bot - Main Logic",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "tail": "wrangler tail",
+    "db:init": "wrangler d1 execute restaurant-db --file=./schema.sql",
+    "db:query": "wrangler d1 execute restaurant-db --command"
+  },
+  "dependencies": {
+    "@line/bot-sdk": "^10.2.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.28.1"
+  },
+  "keywords": ["line", "chatbot", "restaurant", "cloudflare-workers", "d1", "ai"],
+  "author": "Papamica Restaurant",
+  "license": "MIT"
+}
