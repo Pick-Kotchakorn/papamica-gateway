@@ -1,26 +1,17 @@
-﻿{
-  "$schema": "node_modules/wrangler/config-schema.json",
+﻿$botConfig = @"
+{
+  "`$schema": "node_modules/wrangler/config-schema.json",
   "name": "papamica-main-bot",
   "main": "src/index.js",
-  "compatibility_date": "2025-08-29",
+  "compatibility_date": "2024-11-28",
   "compatibility_flags": ["nodejs_compat"],
-  
-  "kv_namespaces": [
-    {
-      "binding": "KV",
-      "id": "7ef48bc1a37e47bfb02a31025a0609ca"
-    }
-  ],
-  
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "restaurant-db",
-      "database_id": "3d7a0fdb-03f2-4b11-a114-48665d9d3cfd"
-    }
-  ],
-  
   "observability": {
     "enabled": true
   }
+  // Resources commented out for initial deploy test
+  // "kv_namespaces": [ ... ],
+  // "d1_databases": [ ... ]
 }
+"@
+
+Set-Content -Path "workers/main-bot/wrangler.jsonc" -Value $botConfig -Encoding UTF8
