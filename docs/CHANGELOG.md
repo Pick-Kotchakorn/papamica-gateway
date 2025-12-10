@@ -1,28 +1,36 @@
-# 📝 Changelog
+﻿# Changelog
 
 All notable changes to this project will be documented in this file.
 
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ---
 
-## [2.0.0] - 2025-01-XX - Major Refactoring
+## [2.0.0] - 2025-01-XX
 
-### 🎯 Highlights
-- **Complete code restructuring** - แยกโค้ดเป็น 10 ไฟล์ตามหน้าที่
-- **Better maintainability** - ง่ายต่อการดูแลและขยายฟังก์ชัน
-- **Comprehensive documentation** - เพิ่มเอกสารครบถ้วน
+### Highlights
 
-### ✨ Added
+- Complete code restructuring into 10 modular files
+- Better maintainability and documentation
+- Comprehensive test functions for each module
+
+### Added
+
 - **Config.gs** - Centralized configuration management
 - **Utils.gs** - Common utility functions
 - **InsightConfig.gs** - Dedicated analytics configuration
 - **InsightDashboard.gs** - Dashboard and reporting functions
 - **README.md** - Comprehensive documentation
 - **DEPLOYMENT_GUIDE.md** - Step-by-step deployment guide
+- **CONTRIBUTING.md** - Contribution guidelines
+- **SECURITY.md** - Security policy
 - New test functions for each module
 - Health check system
 - Better error handling throughout
 
-### 🔄 Changed
+### Changed
+
 - **Main.gs** - Simplified entry point, better routing
 - **EventHandler.gs** - Cleaner event handling with separate functions
 - **LineAPI.gs** - Improved API wrapper with validation
@@ -30,23 +38,26 @@ All notable changes to this project will be documented in this file.
 - **FollowerService.gs** - Better follower management
 - **InsightService.gs** - More efficient data processing
 
-### 🐛 Fixed
+### Fixed
+
 - Improved error logging
 - Better handling of missing data
 - Fixed date comparison issues
 - Enhanced validation
 
-### 📚 Documentation
+### Documentation
+
 - Complete README with API reference
 - Detailed deployment guide
 - Inline comments throughout code
-- Function documentation
+- Function documentation with JSDoc
 
 ---
 
-## [1.0.0] - 2024-XX-XX - Initial Release
+## [1.0.0] - 2024-XX-XX
 
 ### Features
+
 - Basic LINE webhook handling
 - Message echo system
 - Follower tracking
@@ -55,131 +66,95 @@ All notable changes to this project will be documented in this file.
 - Dashboard creation
 
 ### Components
+
 - Single Code.gs file
 - GAS.txt configuration
 - Basic error handling
 
 ---
 
-## Migration Guide: v1.0 → v2.0
+## Migration Guide: v1.0 to v2.0
 
-### การ Migrate จาก Version เก่า
+### Before Upgrading
 
-#### 1. Backup ข้อมูล
-```
-- Export Google Spreadsheet เป็น backup
-- บันทึก Configuration เก่า
-- สำเนา Code เก่าไว้
-```
+1. **Backup your data**
+   - Export Google Spreadsheet as backup
+   - Save current configuration
+   - Save current code
 
-#### 2. สร้าง Project ใหม่
-```
-- สร้าง Google Apps Script project ใหม่
-- Copy โค้ดจาก v2.0 ทั้งหมด
-- แก้ไข Configuration
-```
+2. **Prepare**
+   - Create new Google Apps Script project
+   - Copy v2.0 code files
+   - Update configuration
 
-#### 3. แก้ไข Configuration
-```javascript
-// Config.gs
-const LINE_CONFIG = {
-  CHANNEL_ACCESS_TOKEN: 'YOUR_TOKEN_FROM_V1'
-};
+### Setup Steps
 
-const SHEET_CONFIG = {
-  SPREADSHEET_ID: 'YOUR_SPREADSHEET_ID_FROM_V1'
-};
-```
-
-#### 4. Initialize System
-```javascript
-// รัน
-initializeSystem()
-
-// ตรวจสอบ
-healthCheck()
-```
-
-#### 5. Deploy ใหม่
-```
-1. Deploy > New deployment
-2. อัพเดท Webhook URL ใน LINE Manager
-3. Verify Webhook
-```
-
-#### 6. ทดสอบ
-```javascript
-// ทดสอบแต่ละ Component
-testConfiguration()
-testLineAPI()
-testSheetService()
-testFollowerService()
-```
+1. Create new GAS project
+2. Copy all files from apps-script/ folder
+3. Update Config.gs with your tokens/IDs
+4. Run: clasp run --function initializeSystem
+5. Run: clasp run --function healthCheck
+6. Deploy and update webhook URL in LINE Manager
 
 ### Breaking Changes
 
 #### Configuration Structure
-```javascript
-// ❌ เก่า (v1.0)
+
+OLD (v1.0):
+\\\javascript
 const CONFIG = {
   LINE_CHANNEL_ACCESS_TOKEN: '...',
   SPREADSHEET_ID: '...'
 };
+\\\
 
-// ✅ ใหม่ (v2.0)
+NEW (v2.0):
+\\\javascript
 const LINE_CONFIG = {
   CHANNEL_ACCESS_TOKEN: '...'
 };
 const SHEET_CONFIG = {
   SPREADSHEET_ID: '...'
 };
-```
+\\\
 
 #### Function Names
-```javascript
-// ❌ เก่า
-saveToSheet(data)
 
-// ✅ ใหม่
-saveConversation(data)
-```
-
-```javascript
-// ❌ เก่า
-saveFollowerToSheet(data)
-
-// ✅ ใหม่
-saveFollower(data)
-```
+- saveToSheet()  saveConversation()
+- saveFollowerToSheet()  saveFollower()
+- sendMessage()  pushSimpleMessage()
 
 ### Benefits of v2.0
 
 | Feature | v1.0 | v2.0 |
 |---------|------|------|
-| **Code Organization** | 1-2 files | 10 modular files |
-| **Maintainability** | 🔴 Hard | 🟢 Easy |
-| **Documentation** | 🔴 Minimal | 🟢 Comprehensive |
-| **Testing** | 🔴 No tests | 🟢 Test functions |
-| **Error Handling** | 🟡 Basic | 🟢 Enhanced |
-| **Scalability** | 🟡 Limited | 🟢 Excellent |
+| Code Organization | 1-2 files | 10 modular files |
+| Maintainability | Hard | Easy |
+| Documentation | Minimal | Comprehensive |
+| Testing | No tests | Test functions |
+| Error Handling | Basic | Enhanced |
+| Scalability | Limited | Excellent |
 
 ---
 
 ## Roadmap
 
-### Version 2.1 (Q1 2025)
+### v2.1 (Q1 2025)
+
 - [ ] Dialogflow integration
 - [ ] Rich Menu management
 - [ ] Broadcast message system
 - [ ] User segmentation
 
-### Version 2.2 (Q2 2025)
+### v2.2 (Q2 2025)
+
 - [ ] AI-powered responses (Claude/GPT integration)
-- [ ] Advanced analytics
+- [ ] Advanced analytics dashboard
 - [ ] A/B testing for broadcasts
 - [ ] Custom event tracking
 
-### Version 3.0 (Q3 2025)
+### v3.0 (Q3 2025)
+
 - [ ] Multi-language support
 - [ ] CRM integration
 - [ ] Payment integration
@@ -189,29 +164,22 @@ saveFollower(data)
 
 ## Contributing
 
-We welcome contributions! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Write/update tests
-5. Update documentation
-6. Submit a pull request
+We welcome contributions! See [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 ---
 
 ## Support
 
-- 📧 Email: support@example.com
-- 💬 LINE: @support
-- 📚 Docs: [link-to-docs]
+- Email: support@example.com
+- Issues: [GitHub Issues](https://github.com/Pick-Kotchakorn/papamica-gateway/issues)
+- Docs: [Documentation](../README.md)
 
 ---
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT License - See [LICENSE](../LICENSE) file for details
 
 ---
 
-**Stay updated!** ⭐ Star this project to get notifications
+Last Updated: 2025-12-10
