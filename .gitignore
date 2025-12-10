@@ -1,30 +1,46 @@
-﻿# Secrets & local config
-mySecretToken123.txt
-secrets_backup/
-yondaimebot-dailogflow-a93b376433e6.json
-*.key
-*.pem
+﻿# Environment variables
 .env
-.vscode/
+.env.local
+.env.*.local
 
-# Node / Workers / Build
+# Dependencies
 node_modules/
-dist/
-.wrangler/
-build/
-*.log
+package-lock.json
+yarn.lock
 
-# Database
-*.sqlite
-*.sqlite-shm
-*.sqlite-wal
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
 
 # OS
 .DS_Store
 Thumbs.db
 
-# IDE
-.idea/
-*.swp
-*.swo
+# GAS
+.clasp.json (local)
+
+# Build
+dist/
+build/
+*.js.map
+
+# Logs
+*.log
+logs/
+
+# Secrets & sensitive files
+secrets_backup/
 *.secret
+credentials.json
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
