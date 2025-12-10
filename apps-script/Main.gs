@@ -251,3 +251,55 @@ function initializeSystem() {
   
   return true;
 }
+
+/**
+ * Test configuration
+ * @return {Object} Configuration status
+ */
+function testConfiguration() {
+  try {
+    Logger.log('Testing configuration...');
+    
+    const lineConfig = LINE_CONFIG;
+    const sheetConfig = SHEET_CONFIG;
+    
+    if (!lineConfig || !lineConfig.CHANNEL_ACCESS_TOKEN) {
+      throw new Error('Missing: LINE_CONFIG.CHANNEL_ACCESS_TOKEN');
+    }
+    if (!sheetConfig || !sheetConfig.SPREADSHEET_ID) {
+      throw new Error('Missing: SHEET_CONFIG.SPREADSHEET_ID');
+    }
+    
+    Logger.log(' Configuration test passed');
+    return true;
+  } catch (error) {
+    Logger.log(' Configuration error: ' + error.message);
+    return false;
+  }
+}
+
+/**
+ * Test LINE API
+ * @return {boolean} API working?
+ */
+function testLineAPI() {
+  try {
+    return LINE_CONFIG && LINE_CONFIG.CHANNEL_ACCESS_TOKEN && 
+           LINE_CONFIG.CHANNEL_ACCESS_TOKEN.length > 0;
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Test Sheet Service
+ * @return {boolean} Sheets working?
+ */
+function testSheetService() {
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_CONFIG.SPREADSHEET_ID);
+    return ss && ss.getName().length > 0;
+  } catch (error) {
+    return false;
+  }
+}
