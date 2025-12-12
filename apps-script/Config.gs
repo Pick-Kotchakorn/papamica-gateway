@@ -9,7 +9,7 @@
  */
 const LINE_CONFIG = {
   // LINE Channel Access Token
-  CHANNEL_ACCESS_TOKEN: 'pK1ISEv3EpisSPdg2+LL5GNOWT9jpB9w4Q0CDMfAtp1KCZDM8yGeBvxTf7M6TwT/kTWEJ/3ZyZ5kEqvz8ZezZ2PSAP8cjipmu+n0yH1lxtRWscYYxah2S78+mPvy8yxCgo3B+QwrBLDzXztjvOQDWgdB04t89/1O/w1cDnyilFU=',
+  CHANNEL_ACCESS_TOKEN: 'wQl9rs+m1p0t5eyZRT+2vXMNzeZqDQauwOqH64IbX8mDcRo43tj5t7daBslKezp949cEi3lABOUARb6dEiO8HA0+5ufaoDvnP71DKMtBAYUn2XKDGwfWnoOkahgpnl9cWLIRNrjsSQNJ5dAo5Y6vgwdB04t89/1O/w1cDnyilFU=',
   
   // LINE API Endpoints
   API_ENDPOINTS: {
@@ -28,7 +28,7 @@ const LINE_CONFIG = {
  */
 const SHEET_CONFIG = {
   // Main Spreadsheet ID
-  SPREADSHEET_ID: '1afgFn-5DreAdYW50c8qDTudbvzzQiHbXEAjBpJBSmEo',
+  SPREADSHEET_ID: '1KPqnRtL6MqaWMg0u_EG6Wmg2JCWkHmUyBBUvUcYq5Uo',
   
   // Sheet Names
   SHEETS: {

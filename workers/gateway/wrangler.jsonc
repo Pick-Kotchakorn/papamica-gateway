@@ -1,6 +1,5 @@
-﻿$gatewayConfig = @"
-{
-  "`$schema": "node_modules/wrangler/config-schema.json",
+﻿{
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "papamica-gateway",
   "main": "src/index.js",
   "compatibility_date": "2024-11-28",
@@ -17,6 +16,3 @@
   //   }
   // ]
 }
-"@
-
-Set-Content -Path "workers/gateway/wrangler.jsonc" -Value $gatewayConfig -Encoding UTF8
