@@ -2,7 +2,7 @@
 
 // 📌 รายการ Webhook Endpoints ทั้งหมด
 const WebhookEndpointList = [
-  'https://script.google.com/macros/s/AKfycbzxK7kH5QaCnfpfY2J_76I1EgCBzvSD15nR9CK6eFc66OGaHzK96w742vankKjX4p5K/exec',
+  'https://script.google.com/macros/s/AKfycbxEgtnl4WFLSIqYsHRGxTKsn6JOkSnF6jMmpht3AHm_CuXtIoGwcRN6DvUOaQVpe7w/exec',
 ];
 
 export default {
