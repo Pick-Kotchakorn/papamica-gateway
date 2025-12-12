@@ -1,4 +1,4 @@
-﻿import { validateSignature } from '@line/bot-sdk';
+﻿﻿import { validateSignature } from '@line/bot-sdk';
 
 // 📌 รายการ Webhook Endpoints ทั้งหมด
 const WebhookEndpointList = [
@@ -46,13 +46,15 @@ export default {
     }
 
     // 🎯 ส่งต่อไปยังทุก Endpoints
-    console.log(\🚀 Broadcasting to \ endpoints\);
+    // แก้ไข: ใช้ Template Literals (Backtick) เพื่อรองรับการ Interpolation และ Emoji
+    console.log(`🚀 Broadcasting to ${WebhookEndpointList.length} endpoints`);
     
     ctx.waitUntil(
       Promise.all(
         WebhookEndpointList.map(async (endpoint, index) => {
           try {
-            console.log(\📤 [\] Forwarding to: \\);
+            // แก้ไข: ใช้ Template Literals (Backtick)
+            console.log(`📤 [${index + 1}] Forwarding to: ${endpoint}`);
             
             const response = await fetch(endpoint, {
               method: 'POST',
@@ -64,9 +66,11 @@ export default {
               body: body
             });
 
-            console.log(\✅ [\] Success: \ → \\);
+            // แก้ไข: ใช้ Template Literals (Backtick)
+            console.log(`✅ [${index + 1}] Success: ${response.status} → ${response.statusText}`);
           } catch (err) {
-            console.error(\❌ [\] Failed: \\, err.message);
+            // แก้ไข: ใช้ Template Literals (Backtick)
+            console.error(`❌ [${index + 1}] Failed: ${endpoint}`, err.message);
           }
         })
       )
@@ -83,9 +87,9 @@ async function saveUserMessage(db, eventData) {
     for (const event of eventData.events) {
       if (event.type === 'message' && event.message.type === 'text') {
         await db.prepare(
-          \INSERT INTO conversations 
+          `INSERT INTO conversations 
            (user_id, message_type, message_text, timestamp, raw_event) 
-           VALUES (?, ?, ?, ?, ?)\
+           VALUES (?, ?, ?, ?, ?)`
         )
         .bind(
           event.source.userId,
@@ -96,7 +100,8 @@ async function saveUserMessage(db, eventData) {
         )
         .run();
 
-        console.log(\✅ Saved to D1: \\);
+        // แก้ไข: ใช้ Template Literals (Backtick)
+        console.log(`✅ Saved to D1: ${event.source.userId}`);
       }
     }
   } catch (err) {
