@@ -1,13 +1,14 @@
 // ========================================
-// 📊 SHEETSERVICE.GS - GOOGLE SHEETS OPERATIONS (V2.0 FINAL)
+// 📊 SHEETSERVICE.GS - GOOGLE SHEETS OPERATIONS (V2.1 - Batch Write Optimized & Complete)
 // ========================================
 
 /**
- * Get or Create Sheet (มีอยู่ใน SheetService.gs ต้นฉบับ)
+ * Get or Create Sheet (คงไว้)
  * (โค้ดนี้ถูกคงไว้ตามไฟล์ต้นฉบับของโปรเจกต์)
  */
 function getOrCreateSheet(sheetName, headers = null) {
   try {
+    // Note: SHEET_CONFIG.SPREADSHEET_ID ดึงมาจาก Config.js ที่ถูกแก้ไขให้ใช้ PropertiesService แล้ว
     const ss = SpreadsheetApp.openById(SHEET_CONFIG.SPREADSHEET_ID);
     let sheet = ss.getSheetByName(sheetName);
     
@@ -15,8 +16,8 @@ function getOrCreateSheet(sheetName, headers = null) {
       Logger.log(`📄 Creating sheet: ${sheetName}`);
       sheet = ss.insertSheet(sheetName);
       if (headers && headers.length > 0) {
-        sheet.appendRow(headers);
-        // formatSheetHeader(sheet, 1); // ต้องเรียกใช้ถ้ามีฟังก์ชันนี้
+        // ใช้ setValues แทน appendRow สำหรับ Header (เพื่อความสอดคล้อง)
+        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
         Logger.log(`✅ Added headers to ${sheetName}`);
       }
     } else {
@@ -31,28 +32,54 @@ function getOrCreateSheet(sheetName, headers = null) {
 }
 
 /**
- * Save Conversation to Sheet
- * **รวม Logic การบันทึกจากโค้ด loading-animation.js เดิม**
+ * 💡 NEW: Batch Append Rows
+ * เขียนข้อมูลหลายแถวลงใน Sheet ด้วยการเรียก API เพียงครั้งเดียว (Performance Optimization)
+ * @param {string} sheetName - ชื่อชีต
+ * @param {Array<Array>} data - ข้อมูล array สองมิติ [[row1_col1, row1_col2], [row2_col1, row2_col2]]
+ * @param {Array<string>} headers - Headers สำหรับตรวจสอบการสร้าง Sheet ใหม่
+ */
+function batchAppendRows(sheetName, data, headers = null) {
+  if (!data || data.length === 0) {
+    Logger.log(`⚠️ Batch save skipped: No data for ${sheetName}`);
+    return;
+  }
+  
+  try {
+    const sheet = getOrCreateSheet(sheetName, headers);
+    const numRows = data.length;
+    const numCols = data[0].length;
+    const startRow = sheet.getLastRow() + 1;
+
+    // นี่คือการเรียก API ที่ทรงพลังที่สุด (Fastest Write)
+    sheet.getRange(startRow, 1, numRows, numCols).setValues(data);
+    
+    Logger.log(`💾 Saved ${numRows} rows to ${sheetName} (Batch Write)`);
+    
+  } catch (error) {
+    Logger.log(`❌ Error in batchAppendRows for ${sheetName}: ${error.message}`);
+    // Fallback: ถ้า Error อาจจะลอง append ทีละแถว หรือ throw error
+    throw error;
+  }
+}
+
+/**
+ * Save Conversation to Sheet (ใช้ Batch Write)
  */
 function saveConversation(data) {
+  const sheetName = SHEET_CONFIG.SHEETS.CONVERSATIONS;
+  const headers = SHEET_CONFIG.COLUMNS.CONVERSATIONS;
+  
+  const rowData = [
+    data.timestamp, 
+    data.userId, 
+    data.userMessage, 
+    data.aiResponse, 
+    data.intent
+  ];
+  
   try {
-    // ใช้ getOrCreateSheet และอ้างอิงถึง Column Names จาก SHEET_CONFIG
-    // เนื่องจากโค้ด Dialogflow เดิมของคุณใช้ชื่อ Sheet และ Column แบบง่าย
-    // เราจะสร้าง Sheet "Conversations" ด้วย Headers ที่กำหนดไว้ใน V2.0
-    
-    // Header V2.0: ['Timestamp', 'User ID', 'User Message', 'Response Format', 'Intent']
-    const sheet = getOrCreateSheet(
-      SHEET_CONFIG.SHEETS.CONVERSATIONS, 
-      SHEET_CONFIG.COLUMNS.CONVERSATIONS
-    ); 
-    
-    sheet.appendRow([
-      data.timestamp, 
-      data.userId, 
-      data.userMessage, 
-      data.aiResponse, 
-      data.intent
-    ]);
+    // ใช้ Batch function แม้จะบันทึกเพียง 1 แถว เพื่อใช้ setValues
+    batchAppendRows(sheetName, [rowData], headers);
     
     Logger.log('💾 Saved conversation to sheet');
     
@@ -62,15 +89,59 @@ function saveConversation(data) {
 }
 
 /**
- * Find Row by Value (มีอยู่ใน SheetService.gs ต้นฉบับแล้ว)
+ * Get Sheet Data As Array (💡 NEW: แก้ไขข้อผิดพลาด getSheetDataAsArray is not defined)
+ * ดึงข้อมูลทั้งหมดจาก Sheet และแปลงเป็น Array ของ Objects
+ * โดยใช้แถวแรกเป็น Header
+ * @param {string} sheetName - ชื่อชีต
+ * @return {Array<Object>} Array of objects or empty array
+ */
+function getSheetDataAsArray(sheetName) {
+  try {
+    const sheet = getOrCreateSheet(sheetName); 
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+
+    if (lastRow <= 1) {
+      // มีแค่ Header หรือไม่มีข้อมูล
+      return [];
+    }
+
+    // ดึง Header และ Data ทั้งหมด
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    const dataValues = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+
+    const dataArray = [];
+
+    // แปลงแต่ละแถวเป็น Object
+    dataValues.forEach(row => {
+      const rowObject = {};
+      headers.forEach((header, index) => {
+        // ใช้ header เป็น key และค่าใน cell เป็น value
+        rowObject[header] = row[index];
+      });
+      dataArray.push(rowObject);
+    });
+    
+    Logger.log(`✅ Loaded ${dataArray.length} records from ${sheetName}`);
+    return dataArray;
+
+  } catch (error) {
+    Logger.log(`❌ Error in getSheetDataAsArray for ${sheetName}: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Find Row by Value (คงไว้)
  */
 function findRowByValue(sheet, columnIndex, searchValue) {
   // โค้ดนี้ถูกคงไว้ตามไฟล์ต้นฉบับ
   try {
     const data = sheet.getDataRange().getValues();
+    // เริ่มจากแถวที่ 1 (แถว 0 คือ header)
     for (let i = 1; i < data.length; i++) {
       if (data[i][columnIndex - 1] === searchValue) {
-        return i + 1;
+        return i + 1; // ส่งกลับเลขแถวที่เป็นค่าจริง (1-based index)
       }
     }
     return 0;
@@ -81,7 +152,7 @@ function findRowByValue(sheet, columnIndex, searchValue) {
 }
 
 /**
- * Update Row (มีอยู่ใน SheetService.gs ต้นฉบับแล้ว)
+ * Update Row (คงไว้)
  */
 function updateRow(sheet, rowNumber, values) {
   // โค้ดนี้ถูกคงไว้ตามไฟล์ต้นฉบับ
@@ -89,6 +160,7 @@ function updateRow(sheet, rowNumber, values) {
     if (rowNumber < 1) return false;
     
     const numCols = values.length;
+    // ใช้ setValues เพื่ออัพเดทแถว
     sheet.getRange(rowNumber, 1, 1, numCols).setValues([values]);
     Logger.log(`✅ Updated row ${rowNumber}`);
     return true;
@@ -99,5 +171,5 @@ function updateRow(sheet, rowNumber, values) {
   }
 }
 
-// NOTE: ฟังก์ชันอื่น ๆ เช่น initializeSheets, formatSheetHeader, deleteRow, clearSheetData, 
-// getSheetDataAsArray, getSheetStats มีอยู่ใน SheetService.gs ต้นฉบับแล้ว และสามารถคงไว้ได้
+// NOTE: ฟังก์ชันอื่น ๆ ที่ใช้ saveConversation ใน EventHandler.js ไม่ต้องแก้ไข
+// เพราะเราได้ปรับปรุง saveConversation ให้ทำงานอย่างมีประสิทธิภาพแล้ว

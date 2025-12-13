@@ -1,14 +1,17 @@
 // ========================================
-// 👥 FOLLOWERSERVICE.GS - FOLLOWER MANAGEMENT
+// 👥 FOLLOWERSERVICE.GS - FOLLOWER MANAGEMENT (V2.1 - Cache Optimized)
 // ========================================
 // ไฟล์นี้จัดการข้อมูลผู้ติดตาม (Followers)
 // ครอบคลุมการเพิ่ม, อัพเดท, และดึงข้อมูลผู้ติดตาม
+// เพิ่มการใช้ CacheService เพื่อเพิ่มประสิทธิภาพในการอ่านข้อมูล
+
+// Global Cache Object
+const CACHE = CacheService.getScriptCache();
 
 /**
- * Save Follower Data
+ * Save Follower Data (พร้อม Invalidation)
  * บันทึกหรืออัพเดทข้อมูลผู้ติดตาม
- * 
- * @param {Object} data - Follower data
+ * * @param {Object} data - Follower data
  */
 function saveFollower(data) {
   try {
@@ -46,20 +49,33 @@ function saveFollower(data) {
       Logger.log('✅ Added new follower');
     }
     
+    // 💡 Invalidation: ลบ Cache ของผู้ใช้รายนี้และสถิติเมื่อมีการเปลี่ยนแปลง
+    CACHE.remove(`follower_${data.userId}`);
+    CACHE.remove('follower_stats');
+    
   } catch (error) {
     Logger.log(`❌ Error saving follower: ${error.message}`);
   }
 }
 
 /**
- * Get Follower Data
+ * Get Follower Data (Cache Optimized)
  * ดึงข้อมูลผู้ติดตาม
- * 
- * @param {string} userId - User ID
+ * * @param {string} userId - User ID
  * @return {Object|null} Follower data or null
  */
 function getFollowerData(userId) {
+  const cacheKey = `follower_${userId}`;
+  
   try {
+    // 1. ตรวจสอบ Cache ก่อน
+    const cachedData = CACHE.get(cacheKey);
+    if (cachedData) {
+      Logger.log(`✅ Loaded follower from Cache: ${userId}`);
+      return JSON.parse(cachedData);
+    }
+
+    // 2. ถ้าไม่มีใน Cache ให้ดึงจาก Sheet
     const sheet = getOrCreateSheet(SHEET_CONFIG.SHEETS.FOLLOWERS);
     const rowNum = findRowByValue(sheet, 1, userId);
     
@@ -69,7 +85,7 @@ function getFollowerData(userId) {
     
     const data = sheet.getRange(rowNum, 1, 1, 13).getValues()[0];
     
-    return {
+    const follower = {
       userId: data[0],
       displayName: data[1],
       pictureUrl: data[2],
@@ -85,6 +101,13 @@ function getFollowerData(userId) {
       totalMessages: data[12]
     };
     
+    // 3. บันทึกผลลัพธ์ลง Cache
+    const ttl = SYSTEM_CONFIG.CACHE_SETTINGS.FOLLOWER_TTL_SECONDS;
+    CACHE.put(cacheKey, JSON.stringify(follower), ttl);
+    
+    Logger.log(`✅ Retrieved and Cached follower: ${follower.displayName}`);
+    return follower;
+    
   } catch (error) {
     Logger.log(`❌ Error getting follower data: ${error.message}`);
     return null;
@@ -92,10 +115,9 @@ function getFollowerData(userId) {
 }
 
 /**
- * Update Follower Status
+ * Update Follower Status (พร้อม Invalidation)
  * อัพเดทสถานะของผู้ติดตาม
- * 
- * @param {string} userId - User ID
+ * * @param {string} userId - User ID
  * @param {string} status - New status (active/blocked)
  * @param {Date} timestamp - Timestamp
  */
@@ -115,16 +137,19 @@ function updateFollowerStatus(userId, status, timestamp) {
     
     Logger.log(`✅ Updated user ${userId} status to: ${status}`);
     
+    // 💡 Invalidation
+    CACHE.remove(`follower_${userId}`);
+    CACHE.remove('follower_stats');
+    
   } catch (error) {
     Logger.log(`❌ Error updating follower status: ${error.message}`);
   }
 }
 
 /**
- * Update Follower Interaction
+ * Update Follower Interaction (พร้อม Invalidation)
  * อัพเดทข้อมูลการโต้ตอบของผู้ติดตาม
- * 
- * @param {string} userId - User ID
+ * * @param {string} userId - User ID
  */
 function updateFollowerInteraction(userId) {
   try {
@@ -145,6 +170,10 @@ function updateFollowerInteraction(userId) {
     
     Logger.log(`✅ Updated interaction for user: ${userId}`);
     
+    // 💡 Invalidation
+    CACHE.remove(`follower_${userId}`);
+    CACHE.remove('follower_stats');
+    
   } catch (error) {
     Logger.log(`❌ Error updating follower interaction: ${error.message}`);
   }
@@ -153,8 +182,7 @@ function updateFollowerInteraction(userId) {
 /**
  * Get Active Followers
  * ดึงรายชื่อผู้ติดตามที่ active
- * 
- * @param {number} days - Number of days to consider (default: 7)
+ * * @param {number} days - Number of days to consider (default: 7)
  * @return {Array<Object>} Array of active followers
  */
 function getActiveFollowers(days = 7) {
@@ -182,13 +210,22 @@ function getActiveFollowers(days = 7) {
 }
 
 /**
- * Get Follower Statistics
+ * Get Follower Statistics (Cache Optimized)
  * ดึงสถิติผู้ติดตาม
- * 
- * @return {Object} Follower statistics
+ * * @return {Object} Follower statistics
  */
 function getFollowerStatistics() {
+  const cacheKey = 'follower_stats';
+  
   try {
+    // 1. ตรวจสอบ Cache ก่อน
+    const cachedStats = CACHE.get(cacheKey);
+    if (cachedStats) {
+      Logger.log('✅ Loaded follower statistics from Cache');
+      return JSON.parse(cachedStats);
+    }
+    
+    // 2. ถ้าไม่มีใน Cache ให้ดึงจาก Sheet
     const data = getSheetDataAsArray(SHEET_CONFIG.SHEETS.FOLLOWERS);
     
     const stats = {
@@ -227,7 +264,11 @@ function getFollowerStatistics() {
       stats.totalMessages += follower['Total Messages'] || 0;
     });
     
-    Logger.log('✅ Calculated follower statistics');
+    // 3. บันทึกผลลัพธ์ลง Cache
+    const ttl = SYSTEM_CONFIG.CACHE_SETTINGS.STATS_TTL_SECONDS;
+    CACHE.put(cacheKey, JSON.stringify(stats), ttl);
+    
+    Logger.log('✅ Calculated and Cached follower statistics');
     return stats;
     
   } catch (error) {
@@ -239,8 +280,7 @@ function getFollowerStatistics() {
 /**
  * Get Followers by Tag
  * ดึงรายชื่อผู้ติดตามตาม Tag
- * 
- * @param {string} tag - Tag to filter
+ * * @param {string} tag - Tag to filter
  * @return {Array<Object>} Array of followers with tag
  */
 function getFollowersByTag(tag) {
@@ -262,10 +302,9 @@ function getFollowersByTag(tag) {
 }
 
 /**
- * Add Tag to Follower
+ * Add Tag to Follower (พร้อม Invalidation)
  * เพิ่ม Tag ให้กับผู้ติดตาม
- * 
- * @param {string} userId - User ID
+ * * @param {string} userId - User ID
  * @param {string} tag - Tag to add
  */
 function addTagToFollower(userId, tag) {
@@ -293,16 +332,18 @@ function addTagToFollower(userId, tag) {
     
     Logger.log(`✅ Added tag "${tag}" to user: ${userId}`);
     
+    // 💡 Invalidation
+    CACHE.remove(`follower_${userId}`);
+    
   } catch (error) {
     Logger.log(`❌ Error adding tag: ${error.message}`);
   }
 }
 
 /**
- * Remove Tag from Follower
+ * Remove Tag from Follower (พร้อม Invalidation)
  * ลบ Tag ออกจากผู้ติดตาม
- * 
- * @param {string} userId - User ID
+ * * @param {string} userId - User ID
  * @param {string} tag - Tag to remove
  */
 function removeTagFromFollower(userId, tag) {
@@ -327,6 +368,9 @@ function removeTagFromFollower(userId, tag) {
     
     Logger.log(`✅ Removed tag "${tag}" from user: ${userId}`);
     
+    // 💡 Invalidation
+    CACHE.remove(`follower_${userId}`);
+    
   } catch (error) {
     Logger.log(`❌ Error removing tag: ${error.message}`);
   }
@@ -335,8 +379,7 @@ function removeTagFromFollower(userId, tag) {
 /**
  * Get Top Active Users
  * ดึงรายชื่อผู้ใช้ที่ active ที่สุด
- * 
- * @param {number} limit - Number of users to return (default: 10)
+ * * @param {number} limit - Number of users to return (default: 10)
  * @return {Array<Object>} Array of top users
  */
 function getTopActiveUsers(limit = 10) {
@@ -364,8 +407,7 @@ function getTopActiveUsers(limit = 10) {
 /**
  * Export Followers to CSV
  * Export ข้อมูลผู้ติดตามเป็น CSV
- * 
- * @param {string} status - Filter by status (optional)
+ * * @param {string} status - Filter by status (optional)
  * @return {string} CSV content
  */
 function exportFollowersToCSV(status = null) {
@@ -402,7 +444,7 @@ function exportFollowersToCSV(status = null) {
 }
 
 /**
- * Test Follower Service
+ * Test Follower Service (เพิ่มการทดสอบ Cache Hit)
  * ทดสอบฟังก์ชันต่างๆ ของ Follower Service
  */
 function testFollowerService() {
@@ -430,30 +472,40 @@ function testFollowerService() {
       lastInteraction: new Date(),
       totalMessages: 0
     });
-    Logger.log('   ✅ Follower saved');
+    Logger.log('   ✅ Follower saved (Cache invalidated)');
     
-    // Test 2: Get Follower
-    Logger.log('\n2️⃣ Testing Get Follower...');
-    const follower = getFollowerData(testUserId);
+    // Test 2: Get Follower (Should hit sheet and cache)
+    Logger.log('\n2️⃣ Testing Get Follower (First Call - Sheet Read)...');
+    let follower = getFollowerData(testUserId);
     Logger.log(`   ✅ Retrieved: ${follower?.displayName}`);
     
-    // Test 3: Update Interaction
-    Logger.log('\n3️⃣ Testing Update Interaction...');
+    // Test 3: Get Follower (Should hit cache)
+    Logger.log('\n3️⃣ Testing Get Follower (Second Call - Cache Hit)...');
+    follower = getFollowerData(testUserId);
+    Logger.log(`   ✅ Retrieved: ${follower?.displayName}`);
+    
+    // Test 4: Update Interaction (Invalidates cache)
+    Logger.log('\n4️⃣ Testing Update Interaction (Invalidates Cache)...');
     updateFollowerInteraction(testUserId);
     Logger.log('   ✅ Interaction updated');
     
-    // Test 4: Add Tag
-    Logger.log('\n4️⃣ Testing Add Tag...');
+    // Test 5: Add Tag (Invalidates cache)
+    Logger.log('\n5️⃣ Testing Add Tag (Invalidates Cache)...');
     addTagToFollower(testUserId, 'vip');
     Logger.log('   ✅ Tag added');
     
-    // Test 5: Get Statistics
-    Logger.log('\n5️⃣ Testing Get Statistics...');
-    const stats = getFollowerStatistics();
+    // Test 6: Get Statistics (Should hit sheet and cache)
+    Logger.log('\n6️⃣ Testing Get Statistics (First Call - Sheet Read)...');
+    let stats = getFollowerStatistics();
     Logger.log(`   ✅ Stats: ${JSON.stringify(stats)}`);
     
-    // Test 6: Get Active Followers
-    Logger.log('\n6️⃣ Testing Get Active Followers...');
+    // Test 7: Get Statistics (Should hit cache)
+    Logger.log('\n7️⃣ Testing Get Statistics (Second Call - Cache Hit)...');
+    stats = getFollowerStatistics();
+    Logger.log(`   ✅ Stats: ${JSON.stringify(stats)}`);
+    
+    // Test 8: Get Active Followers
+    Logger.log('\n8️⃣ Testing Get Active Followers...');
     const activeFollowers = getActiveFollowers(7);
     Logger.log(`   ✅ Found ${activeFollowers.length} active followers`);
     

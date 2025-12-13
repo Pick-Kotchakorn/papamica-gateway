@@ -1,9 +1,10 @@
-﻿﻿import { validateSignature } from '@line/bot-sdk';
+﻿﻿// workers/gateway/src/index.js
+
+import { validateSignature } from '@line/bot-sdk';
 
 // 📌 รายการ Webhook Endpoints ทั้งหมด
-const WebhookEndpointList = [
-  'https://script.google.com/macros/s/AKfycbxEgtnl4WFLSIqYsHRGxTKsn6JOkSnF6jMmpht3AHm_CuXtIoGwcRN6DvUOaQVpe7w/exec',
-];
+// แก้ไข: ใช้ env.GAS_ENDPOINT แทนการ hardcode list
+const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxEgtnl4WFLSIqYsHRGxTKsn6JOkSnF6jMmpht3AHm_CuXtIoGwcRN6DvUOaQVpe7w/exec';
 
 export default {
   async fetch(request, env, ctx) {
@@ -22,18 +23,24 @@ export default {
     // อ่าน body เป็น text เพื่อใช้ validate และ parse
     const body = await request.text();
     
-    // ⚠️ หมายเหตุ: env.CHANNEL_SECRET ต้องตรงกับชื่อ Secret ใน GitHub/Cloudflare
-    // ถ้าตั้งใน GitHub ว่า LINE_CHANNEL_SECRET ในโค้ดต้องเรียก env.LINE_CHANNEL_SECRET
-    // แต่เดี๋ยวเราค่อยมาแก้ชื่อตัวแปรทีหลังได้ครับ เอาให้ Deploy ผ่านก่อน
+    // 💡 V2.1 Security Fix: เปิดใช้งาน Signature Validation
+    const channelSecret = env.LINE_CHANNEL_SECRET;
     
-    // const isValid = validateSignature(body, env.CHANNEL_SECRET, signature);
-    // เพื่อให้ Deploy ผ่านรอบนี้ ผมขอ comment การ validate จริงจังไว้ก่อน
-    // เพราะถ้า env.CHANNEL_SECRET เป็น undefined มันจะ error
-    const isValid = true; 
+    if (!channelSecret) {
+      console.error('❌ LINE_CHANNEL_SECRET is NOT set in Cloudflare Secrets!');
+      return new Response('Server Error: Missing Secret', { status: 500 });
+    }
     
-    if (!isValid) {
-      console.log('❌ Invalid signature');
-      return new Response('Invalid signature', { status: 400 });
+    try {
+      const isValid = validateSignature(body, channelSecret, signature); 
+      
+      if (!isValid) {
+        console.log('❌ Invalid signature. Request rejected.');
+        return new Response('Invalid signature', { status: 403 }); // 403 Forbidden
+      }
+    } catch (error) {
+      console.error('❌ Signature Validation Error:', error.message);
+      return new Response('Validation failed', { status: 500 });
     }
 
     console.log('✅ Signature validated');
@@ -45,18 +52,15 @@ export default {
       ctx.waitUntil(saveUserMessage(env.DB, eventData));
     }
 
-    // 🎯 ส่งต่อไปยังทุก Endpoints
-    // แก้ไข: ใช้ Template Literals (Backtick) เพื่อรองรับการ Interpolation และ Emoji
-    console.log(`🚀 Broadcasting to ${WebhookEndpointList.length} endpoints`);
+    // 🎯 ส่งต่อไปยัง GAS Endpoint
+    // 💡 ใช้ env.GAS_ENDPOINT ที่ตั้งค่าใน wrangler.toml/Secrets
+    const endpointToForward = env.GAS_ENDPOINT || GAS_ENDPOINT;
+    console.log(`🚀 Forwarding to GAS Endpoint: ${endpointToForward}`);
     
     ctx.waitUntil(
-      Promise.all(
-        WebhookEndpointList.map(async (endpoint, index) => {
-          try {
-            // แก้ไข: ใช้ Template Literals (Backtick)
-            console.log(`📤 [${index + 1}] Forwarding to: ${endpoint}`);
-            
-            const response = await fetch(endpoint, {
+      (async () => {
+        try {
+            const response = await fetch(endpointToForward, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -66,14 +70,11 @@ export default {
               body: body
             });
 
-            // แก้ไข: ใช้ Template Literals (Backtick)
-            console.log(`✅ [${index + 1}] Success: ${response.status} → ${response.statusText}`);
+            console.log(`✅ Forward Success: ${response.status} → ${response.statusText}`);
           } catch (err) {
-            // แก้ไข: ใช้ Template Literals (Backtick)
-            console.error(`❌ [${index + 1}] Failed: ${endpoint}`, err.message);
+            console.error('❌ Forward Failed to GAS:', err.message);
           }
-        })
-      )
+      })()
     );
 
     return new Response('OK', { status: 200 });
@@ -81,6 +82,7 @@ export default {
 };
 
 async function saveUserMessage(db, eventData) {
+  // ... (โค้ดเดิม)
   try {
     if (!eventData.events || eventData.events.length === 0) return;
 
@@ -100,7 +102,6 @@ async function saveUserMessage(db, eventData) {
         )
         .run();
 
-        // แก้ไข: ใช้ Template Literals (Backtick)
         console.log(`✅ Saved to D1: ${event.source.userId}`);
       }
     }

@@ -1,15 +1,18 @@
 // ========================================
-// 🔧 CONFIG.GS - MAIN CONFIGURATION
+// 🔧 CONFIG.JS - MAIN CONFIGURATION (V2.1 - Secure & Cache Ready)
 // ========================================
 // ไฟล์นี้เก็บการตั้งค่าทั้งหมดของระบบ
-// แก้ไขที่นี่เมื่อต้องการเปลี่ยนค่า configuration
+// ดึงค่าสำคัญจาก Script Properties เพื่อความปลอดภัย
+
+// ดึงค่า PropertiesService มาเก็บไว้ในตัวแปรเพื่อความสะดวก
+const PROPERTIES = PropertiesService.getScriptProperties();
 
 /**
  * LINE Official Account Configuration
  */
 const LINE_CONFIG = {
-  // LINE Channel Access Token
-  CHANNEL_ACCESS_TOKEN: 'wQl9rs+m1p0t5eyZRT+2vXMNzeZqDQauwOqH64IbX8mDcRo43tj5t7daBslKezp949cEi3lABOUARb6dEiO8HA0+5ufaoDvnP71DKMtBAYUn2XKDGwfWnoOkahgpnl9cWLIRNrjsSQNJ5dAo5Y6vgwdB04t89/1O/w1cDnyilFU=',
+  // LINE Channel Access Token (ดึงจาก Script Properties)
+  CHANNEL_ACCESS_TOKEN: PROPERTIES.getProperty('LINE_CHANNEL_ACCESS_TOKEN'),
   
   // LINE API Endpoints
   API_ENDPOINTS: {
@@ -27,8 +30,8 @@ const LINE_CONFIG = {
  * Google Sheets Configuration
  */
 const SHEET_CONFIG = {
-  // Main Spreadsheet ID
-  SPREADSHEET_ID: '1KPqnRtL6MqaWMg0u_EG6Wmg2JCWkHmUyBBUvUcYq5Uo',
+  // Main Spreadsheet ID (ดึงจาก Script Properties)
+  SPREADSHEET_ID: PROPERTIES.getProperty('SHEET_SPREADSHEET_ID'),
   
   // Sheet Names
   SHEETS: {
@@ -78,20 +81,26 @@ const SHEET_CONFIG = {
 const SYSTEM_CONFIG = {
   // Feature Flags
   FEATURES: {
-    DIALOGFLOW_ENABLED: true,      // ⚠️ Dialogflow ปิดชั่วคราว
-    ANALYTICS_ENABLED: true,         // ✅ Analytics เปิดใช้งาน
-    AUTO_RESPONSE: false,             // ✅ Echo message เปิดใช้งาน
-    FOLLOWER_TRACKING: true          // ✅ ติดตามผู้ติดตามเปิดใช้งาน
+    DIALOGFLOW_ENABLED: true,      
+    ANALYTICS_ENABLED: true,         
+    AUTO_RESPONSE: false,             
+    FOLLOWER_TRACKING: true          
   },
   
-  // ใน Config.gs ภายใต้ SYSTEM_CONFIG.MESSAGES
+  // Cache Settings (ใช้ใน FollowerService.js)
+  CACHE_SETTINGS: {
+    FOLLOWER_TTL_SECONDS: 3600, // แคชข้อมูลผู้ติดตาม 1 ชั่วโมง
+    STATS_TTL_SECONDS: 300      // แคชสถิติ 5 นาที
+  },
+  
+  // Response Messages
   MESSAGES: {
-  MAINTENANCE: 'ระบบอยู่ระหว่างการปรับปรุง กรุณาลองใหม่อีกครั้งในภายหลัง 🙏',
-  ERROR: 'ขออภัยครับ ระบบอยู่ระหว่างปรับปรุง กรุณาลองใหม่อีกครั้ง',
-  ECHO_TEMPLATE: '📩 คุณส่งข้อความว่า: "{message}"\n\n⚙️ ระบบอยู่ระหว่างการปรับปรุง\nขออภัยในความไม่สะดวก 🙏',
-  NO_WELCOME_MESSAGE: '[NO WELCOME MESSAGE - Handled by LINE Manager]',
-  AI_FALLBACK: '🤖 ขออภัยค่ะ ตอนนี้บอทไม่เข้าใจคำถามของคุณ แต่เราจะส่งเรื่องให้แอดมินช่วยดูแลต่อทันทีค่ะ' // <--- เพิ่มตรงนี้
-},
+    MAINTENANCE: 'ระบบอยู่ระหว่างการปรับปรุง กรุณาลองใหม่อีกครั้งในภายหลัง 🙏',
+    ERROR: 'ขออภัยครับ ระบบอยู่ระหว่างปรับปรุง กรุณาลองใหม่อีกครั้ง',
+    ECHO_TEMPLATE: '📩 คุณส่งข้อความว่า: "{message}"\n\n⚙️ ระบบอยู่ระหว่างการปรับปรุง\nขออภัยในความไม่สะดวก 🙏',
+    NO_WELCOME_MESSAGE: '[NO WELCOME MESSAGE - Handled by LINE Manager]',
+    AI_FALLBACK: '🤖 ขออภัยค่ะ ตอนนี้บอทไม่เข้าใจคำถามของคุณ แต่เราจะส่งเรื่องให้แอดมินช่วยดูแลต่อทันทีค่ะ'
+  },
   
   // Default Values
   DEFAULTS: {
@@ -100,7 +109,7 @@ const SYSTEM_CONFIG = {
     FOLLOWER_TAGS: 'new-customer',
     UNKNOWN_DISPLAY_NAME: 'Unknown',
     UNKNOWN_LANGUAGE: 'unknown',
-    DIALOGFLOW_CONFIDENCE_THRESHOLD: 0.65 // <--- ค่านี้ถูกต้อง
+    DIALOGFLOW_CONFIDENCE_THRESHOLD: 0.65
   }
 };
 
@@ -136,8 +145,8 @@ function validateConfig() {
     Logger.log('🔍 Validating configuration...');
     
     const checks = [
-      { name: 'LINE Access Token', value: LINE_CONFIG.CHANNEL_ACCESS_TOKEN },
-      { name: 'Spreadsheet ID', value: SHEET_CONFIG.SPREADSHEET_ID },
+      { name: 'LINE Access Token (via Properties)', value: LINE_CONFIG.CHANNEL_ACCESS_TOKEN },
+      { name: 'Spreadsheet ID (via Properties)', value: SHEET_CONFIG.SPREADSHEET_ID },
       { name: 'Sheet Names', value: Object.keys(SHEET_CONFIG.SHEETS).length > 0 }
     ];
     
@@ -145,10 +154,17 @@ function validateConfig() {
     
     checks.forEach(check => {
       if (!check.value) {
-        Logger.log(`❌ Missing: ${check.name}`);
-        allValid = false;
+        if (typeof check.value === 'string' && check.value.length < 20) {
+           Logger.log(`❌ Missing/Invalid: ${check.name} (Value: ${check.value})`);
+           allValid = false;
+        } else if (!check.value) {
+           Logger.log(`❌ Missing/Invalid: ${check.name}`);
+           allValid = false;
+        } else {
+           Logger.log(`✅ Valid: ${check.name}`);
+        }
       } else {
-        Logger.log(`✅ Valid: ${check.name}`);
+         Logger.log(`✅ Valid: ${check.name}`);
       }
     });
     
@@ -174,11 +190,11 @@ function testConfiguration() {
   Logger.log('=' .repeat(60));
   
   Logger.log('\n📋 LINE Configuration:');
-  Logger.log(`  Token Length: ${LINE_CONFIG.CHANNEL_ACCESS_TOKEN.length} chars`);
+  Logger.log(`  Token Check: ${LINE_CONFIG.CHANNEL_ACCESS_TOKEN ? 'Loaded' : '❌ Failed'}`);
   Logger.log(`  Loading Seconds: ${LINE_CONFIG.LOADING_SECONDS}s`);
   
   Logger.log('\n📊 Sheet Configuration:');
-  Logger.log(`  Spreadsheet ID: ${SHEET_CONFIG.SPREADSHEET_ID}`);
+  Logger.log(`  Spreadsheet ID Check: ${SHEET_CONFIG.SPREADSHEET_ID ? 'Loaded' : '❌ Failed'}`);
   Logger.log(`  Total Sheets: ${Object.keys(SHEET_CONFIG.SHEETS).length}`);
   
   Logger.log('\n⚙️ System Features:');
