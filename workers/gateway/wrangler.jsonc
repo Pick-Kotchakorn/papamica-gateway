@@ -1,4 +1,5 @@
-﻿{
+﻿// workers/gateway/wrangler.jsonc
+{
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "papamica-gateway",
   "main": "src/index.js",
@@ -6,8 +7,6 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true
-  },
-  // 💡 NEW: เพิ่ม account_id เพื่อให้ Wrangler ทราบ ID บัญชี
-  // GitHub Actions จะใช้ env.CLOUDFLARE_ACCOUNT_ID ที่ส่งมา Overwrite ค่านี้
-  "account_id": "PLACEHOLDER_ACCOUNT_ID" 
+  }
+  // ❌ ลบ: "account_id": "PLACEHOLDER_ACCOUNT_ID" ออก
 }
