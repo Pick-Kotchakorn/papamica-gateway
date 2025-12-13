@@ -1,12 +1,11 @@
-﻿// workers/gateway/wrangler.jsonc
-{
+﻿{
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "papamica-gateway",
+  "name": "papamica-main-bot",
   "main": "src/index.js",
   "compatibility_date": "2024-11-28",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true
   }
-  // ❌ ลบ: "account_id": "PLACEHOLDER_ACCOUNT_ID" ออก
+  // ❌ บรรทัด "account_id": "PLACEHOLDER_ACCOUNT_ID" ต้องถูกลบออกไปแล้ว
 }
