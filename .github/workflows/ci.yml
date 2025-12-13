@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18]
+        node-version: [20] # FIX: เปลี่ยนจาก [18] เป็น [20]
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js ${{ matrix.node-version }}
@@ -37,7 +37,6 @@ jobs:
       
       - name: Install & Test (Gateway)
         working-directory: workers/gateway
-        # แก้ไข: เปลี่ยน npm ci เป็น npm install เพื่อความยืดหยุ่น
         run: |
           npm install
           npm run lint || true
@@ -47,7 +46,7 @@ jobs:
         run: |
           npm install
           npm run lint || true
-
+          
   file-structure:
     runs-on: ubuntu-latest
     steps:

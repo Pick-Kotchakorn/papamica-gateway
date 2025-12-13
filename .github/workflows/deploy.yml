@@ -15,25 +15,24 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20' # FIX: Updated from '18' to '20'
           cache: 'npm'
           cache-dependency-path: 'workers/gateway/package.json'
 
       - name: Install & Deploy Gateway
         working-directory: 'workers/gateway'
         env:
-          # Secret สำหรับ Cloudflare Auth (Token ยังคงเป็น Env)
+          # Secret สำหรับ Cloudflare Auth (Token)
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          # Secret สำหรับ Worker Runtime (สำหรับโค้ด Gateway Worker)
+          # Secret สำหรับ Worker Runtime (สำหรับโค้ด Gateway Worker ที่เราแก้ไข)
           LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
           GAS_ENDPOINT: ${{ secrets.GAS_ENDPOINT }}
-          # Account ID ถูกย้ายไปที่คำสั่ง deploy
         run: |
           echo "📦 Installing dependencies..."
           npm install
           
           echo "🚀 Deploying to Cloudflare..."
-          # 💡 FIX: ส่ง Account ID เป็นพารามิเตอร์โดยตรง (Guaranteed)
+          # FIX: ระบุชื่อ Worker และ Account ID โดยตรงเพื่อแก้ปัญหา Authentication
           npx wrangler deploy --name papamica-gateway --account-id ${{ secrets.CLOUDFLARE_ACCOUNT_ID }} 
 
   deploy-bot:
@@ -46,7 +45,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20' # FIX: Updated from '18' to '20'
 
       - name: Install & Deploy Main Bot
         working-directory: 'workers/main-bot'
@@ -57,5 +56,5 @@ jobs:
           npm install
           
           echo "🚀 Deploying to Cloudflare..."
-          # 💡 FIX: ส่ง Account ID เป็นพารามิเตอร์โดยตรง (Guaranteed)
+          # FIX: ระบุชื่อ Worker และ Account ID โดยตรง
           npx wrangler deploy --name papamica-main-bot --account-id ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
