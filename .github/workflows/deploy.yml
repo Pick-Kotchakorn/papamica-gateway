@@ -22,15 +22,19 @@ jobs:
       - name: Install & Deploy Gateway
         working-directory: 'workers/gateway'
         env:
-          # ส่ง Secret เข้าไปเป็น Environment Variable
+          # Secret สำหรับ Cloudflare Auth (ต้องใช้)
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Secret สำหรับ Worker Runtime (สำหรับโค้ด Gateway Worker ที่เราแก้ไข)
+          LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
+          GAS_ENDPOINT: ${{ secrets.GAS_ENDPOINT }}
         run: |
           echo "📦 Installing dependencies..."
           npm install
           
           echo "🚀 Deploying to Cloudflare..."
-          npx wrangler deploy
+          # FIX: ระบุชื่อ Worker ชัดเจนเพื่อแก้ Error
+          npx wrangler deploy --name papamica-gateway 
 
   deploy-bot:
     runs-on: ubuntu-latest
@@ -54,4 +58,5 @@ jobs:
           npm install
           
           echo "🚀 Deploying to Cloudflare..."
-          npx wrangler deploy
+          # FIX: ระบุชื่อ Worker ชัดเจน
+          npx wrangler deploy --name papamica-main-bot
