@@ -1,13 +1,13 @@
 ﻿{
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "papamica-main-bot",
+  "name": "papamica-gateway",
   "main": "src/index.js",
   "compatibility_date": "2024-11-28",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true
-  }
-  // Resources commented out for initial deploy test
-  // "kv_namespaces": [ ... ],
-  // "d1_databases": [ ... ]
+  },
+  // 💡 NEW: เพิ่ม account_id เพื่อให้ Wrangler ทราบ ID บัญชี
+  // GitHub Actions จะใช้ env.CLOUDFLARE_ACCOUNT_ID ที่ส่งมา Overwrite ค่านี้
+  "account_id": "PLACEHOLDER_ACCOUNT_ID" 
 }
