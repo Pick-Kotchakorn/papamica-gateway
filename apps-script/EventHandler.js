@@ -1,9 +1,9 @@
 // ========================================
-// 📨 EVENTHANDLER.GS - EVENT PROCESSING (V2.2 - Single-Step Report Flow)
+// 📨 EVENTHANDLER.GS - CHAT FLOW EDITION (V2.3)
 // ========================================
 // ไฟล์นี้จัดการ Events ต่างๆ จาก LINE
-// Note: ต้องพึ่งพา LineAPI.gs, SheetService.gs, FollowerService.gs, DialogflowService.gs
-// 💡 NEW DEPENDENCIES: ReportStateService.gs, OilReportService.gs, Utils.js
+// ปรับปรุง: เปลี่ยนจาก Web Form เป็น Interactive Chat Flow
+// Note: ต้องพึ่งพา LineAPI.gs, SheetService.gs, FollowerService.gs, DialogflowService.gs, ReportStateService.gs
 
 // ========================================
 // 1. Message Router (ใช้ใน Main.js)
@@ -14,9 +14,27 @@
  */
 function handleMessageEvent(event) {
   try {
+    const userId = event.source?.userId;
     const messageType = event.message?.type;
-    if (!messageType) return;
     
+    if (!messageType || !userId) return;
+
+    // ----------------------------------------------------
+    // 🟢 CHAT FLOW INTERCEPTOR
+    // ตรวจสอบก่อนว่า User อยู่ในระหว่างขั้นตอนรายงานหรือไม่?
+    // ----------------------------------------------------
+    if (typeof getReportState === 'function') {
+      const currentState = getReportState(userId); // จาก ReportStateService.js
+      
+      if (currentState) {
+        Logger.log(`🔄 User ${userId} is in state: ${currentState.step}`);
+        // ถ้ามีสถานะค้างอยู่ ให้ส่งไปเข้า Flow รายงานทันที (ตัดบท Dialogflow)
+        handleOilReportFlow(event, currentState);
+        return;
+      }
+    }
+    // ----------------------------------------------------
+
     Logger.log(`📨 Message type: ${messageType}`);
 
     switch (messageType) {
@@ -25,7 +43,7 @@ function handleMessageEvent(event) {
         break;
         
       case 'image':
-        // 💡 NEW LOGIC: ภาพที่ไม่ได้อยู่ใน Flow จะถูกละเว้น/บันทึก Log ธรรมดา
+        // ถ้าไม่ได้อยู่ใน Flow รายงาน ให้จัดการแบบ Media ปกติ
         handleMediaMessage(event, 'Image', 'media.image', 'Image received');
         break;
         
@@ -66,7 +84,7 @@ function handleMessageEvent(event) {
 // ========================================
 
 /**
- * Handle Text Message (Logic หลัก Dialogflow/Maintenance และ Single-step Link Reply)
+ * Handle Text Message (Logic หลัก: Trigger Chat Flow / Dialogflow / Maintenance)
  */
 function handleTextMessage(event) {
   const userId = event.source?.userId;
@@ -75,56 +93,52 @@ function handleTextMessage(event) {
   if (!userId || !userMessage) return;
 
   try {
+    // แสดง Loading Animation เฉพาะตอนเริ่ม
     sendLoadingAnimation(userId);
+    
     let aiResponseText = '';
     let intentName = 'N/A';
     
     // ====================================================
-    // 💡 NEW LOGIC START: Single-step Web Form Trigger
-    // (ดักจับข้อความจาก Quick Reply: EmQuartier, KingsQuare, One Bangkok)
+    // 🟢 CHAT FLOW TRIGGER (แทนที่ Web Form Link)
+    // (ดักจับชื่อสาขาเพื่อเริ่ม Flow รายงานในแชท)
     // ====================================================
     const branchMap = {
-        'kingsquare': 'KSQ',
-        'emquartier': 'EMQ',
-        'one bangkok': 'ONB'
+        'kingsquare': 'KSQ', 'ksq': 'KSQ',
+        'emquartier': 'EMQ', 'emq': 'EMQ',
+        'one bangkok': 'ONB', 'onb': 'ONB'
     };
 
     const userMessageLower = userMessage.toLowerCase();
     const selectedBranchCode = branchMap[userMessageLower];
 
     if (selectedBranchCode) {
+        Logger.log(`🚀 Starting Oil Report Flow for branch: ${selectedBranchCode}`);
         
-        // 1. สร้าง URL ของ Web Form
-        const LIFF_URL = SYSTEM_CONFIG.URLS.OIL_REPORT_FORM; 
+        // 1. ตั้งสถานะเป็น "รอรับยอดเงิน" (AWAITING_AMOUNT)
+        setReportState(userId, 'AWAITING_AMOUNT', { branch: selectedBranchCode });
         
-        // ส่ง userId และ branchCode ผ่าน parameter
-        const formUrl = LIFF_URL + 
-                        `?branch=${selectedBranchCode}` +
-                        `&userId=${userId}`;
-
-        const formText = `✅ สาขา ${userMessage} ได้รับการเลือก\n\nกรุณาคลิกลิงก์ด้านล่างเพื่อกรอกยอดขายและแนบรูปบิลในฟอร์มเดียว:\n\n🔗 ${formUrl}`;
-
-        pushSimpleMessage(userId, formText);
+        // 2. ตอบกลับเพื่อขอข้อมูลขั้นถัดไป
+        const replyText = `📍 สาขา: ${selectedBranchCode}\n💰 กรุณาพิมพ์ "ยอดขาย" (เฉพาะตัวเลข) ส่งมาได้เลยครับ`;
+        pushSimpleMessage(userId, replyText);
         
-        // 2. Log the event
+        // 3. Log การเริ่ม Flow
         saveConversation({ 
           userId: userId,
           userMessage: userMessage, 
-          aiResponse: formText, 
-          intent: 'oil_report.form_link_sent',
+          aiResponse: replyText, 
+          intent: 'oil_report.start',
           timestamp: new Date()
         });
         
         updateFollowerInteraction(userId);
         
-        return; // 🛑 หยุดการทำงานที่นี่ ไม่ต้องไป Dialogflow/Fallback
+        return; // 🛑 หยุดการทำงานที่นี่ ไม่ต้องไป Dialogflow
     }
-    // ====================================================
-    // 💡 NEW LOGIC END
     // ====================================================
         
     // ----------------------------------------------------
-    // LOGIC เดิม: Dialogflow / Hybrid AI
+    // LOGIC เดิม: Dialogflow / Hybrid AI (คงไว้ตามเดิม)
     // ----------------------------------------------------
     
     // ตรวจสอบสถานะ DIALOGFLOW_ENABLED (จาก SYSTEM_CONFIG.FEATURES)
@@ -134,20 +148,25 @@ function handleTextMessage(event) {
 
       if (dialogflowResponse && dialogflowResponse.messages) {
           
-          // 💡 NEW LOGIC: ดักจับ Template Trigger (เช่น booking.table)
+          // ดักจับ Template Trigger (เช่น booking.table)
           const fulfillmentText = dialogflowResponse.fulfillmentText?.trim() || '';
           
           if (fulfillmentText === 'TRIGGER_BOOKING_TEMPLATE') {
               Logger.log('📞 Intent Matched: Booking Template Triggered!');
               
-              const bookingMessages = getBookingTemplate(); 
-              sendLineMessages(userId, { messages: bookingMessages });
-              
-              aiResponseText = formatResponseForSheet(bookingMessages);
+              const bookingMessages = getBookingTemplate(); // (สมมติว่ามีฟังก์ชันนี้หรือต้อง import เพิ่ม)
+              // ถ้าไม่มีฟังก์ชัน getBookingTemplate ให้ใช้ข้อความธรรมดาแทน หรือ comment บรรทัดนี้
+              if (typeof getBookingTemplate === 'function') {
+                 sendLineMessages(userId, { messages: bookingMessages });
+                 aiResponseText = formatResponseForSheet(bookingMessages);
+              } else {
+                 pushSimpleMessage(userId, "ระบบจองโต๊ะยังไม่เปิดใช้งานครับ");
+                 aiResponseText = "Booking Template Not Found";
+              }
               intentName = 'booking.table';
 
           } else {
-              // 🧠 HYBRID AI LOGIC START (Logic เดิม)
+              // 🧠 HYBRID AI LOGIC START
               const confidence = dialogflowResponse.confidence || 0;
               const CONFIDENCE_THRESHOLD = SYSTEM_CONFIG.DEFAULTS.DIALOGFLOW_CONFIDENCE_THRESHOLD || 0.65; 
               
@@ -165,12 +184,12 @@ function handleTextMessage(event) {
               // 🧠 HYBRID AI LOGIC END
           }
           
-    } else {
-        // Dialogflow ล้มเหลว - ใช้ External AI Fallback
-        aiResponseText = queryExternalAI(userMessage); 
-        sendLineMessages(userId, { messages: [{ type: 'text', text: aiResponseText }] });
-        intentName = 'ai.external.fallback';
-    }
+      } else {
+          // Dialogflow ล้มเหลว - ใช้ External AI Fallback
+          aiResponseText = queryExternalAI(userMessage); 
+          sendLineMessages(userId, { messages: [{ type: 'text', text: aiResponseText }] });
+          intentName = 'ai.external.fallback';
+      }
       
     } else {
       // 🔴 ปิดใช้งาน Dialogflow (Maintenance Mode / Manual Chat Mode)
@@ -187,7 +206,7 @@ function handleTextMessage(event) {
       intentName = 'manual.mode';
     }
     
-    // ✅ อัปเดตสถิติผู้ติดตาม (ต้องรันเสมอ)
+    // ✅ อัปเดตสถิติผู้ติดตาม
     updateFollowerInteraction(userId); 
 
     // ✅ บันทึกข้อมูลลง Sheet
@@ -206,8 +225,82 @@ function handleTextMessage(event) {
 }
 
 /**
- * Handle Postback Event (Logic หลัก Dialogflow/Maintenance)
- * ⚠️ Note: Flow Oil Report เดิม (ที่ใช้ Postback) ถูกนำออกแล้ว
+ * ⚙️ Handle Oil Report Flow (ฟังก์ชันใหม่สำหรับจัดการ Flow)
+ * ถูกเรียกเมื่อ User มี State ค้างอยู่ (AWAITING_AMOUNT หรือ AWAITING_IMAGE)
+ */
+function handleOilReportFlow(event, state) {
+  const userId = event.source.userId;
+  const msg = event.message;
+
+  // --- CASE 1: ผู้ใช้พิมพ์ "ยกเลิก" ---
+  if (msg.type === 'text' && msg.text.trim() === 'ยกเลิก') {
+    clearReportState(userId);
+    pushSimpleMessage(userId, '❌ ยกเลิกรายการเรียบร้อยครับ หากต้องการรายงานใหม่ กรุณาพิมพ์ชื่อสาขาอีกครั้ง');
+    return;
+  }
+
+  // --- STEP 1: รอรับยอดเงิน (AWAITING_AMOUNT) ---
+  if (state.step === 'AWAITING_AMOUNT') {
+    if (msg.type === 'text') {
+      // ลบลูกน้ำและช่องว่างออก
+      const amountText = msg.text.replace(/,/g, '').trim(); 
+      const amount = parseFloat(amountText);
+
+      if (!isNaN(amount) && amount > 0) {
+        // ยอดเงินถูกต้อง -> ไปขั้นตอนถัดไป
+        const nextData = { ...state.data, amount: amount };
+        setReportState(userId, 'AWAITING_IMAGE', nextData);
+
+        pushSimpleMessage(userId, `✅ รับยอด ${formatNumber(amount)} บาท\n📸 กรุณา "ส่งรูปสลิป/บิล" เข้ามาเพื่อยืนยันครับ\n(พิมพ์ "ยกเลิก" เพื่อเริ่มใหม่)`);
+      } else {
+        pushSimpleMessage(userId, '⚠️ กรุณาพิมพ์เฉพาะ "ตัวเลข" เท่านั้นครับ (เช่น 500 หรือ 1250.50)');
+      }
+    } else {
+      pushSimpleMessage(userId, '⚠️ กรุณาพิมพ์ยอดเงินเป็นตัวเลขครับ');
+    }
+    return;
+  }
+
+  // --- STEP 2: รอรับรูปภาพ (AWAITING_IMAGE) ---
+  if (state.step === 'AWAITING_IMAGE') {
+    if (msg.type === 'image') {
+      try {
+        // pushSimpleMessage(userId, '⏳ กำลังบันทึกข้อมูล...'); // Optional: เปิดถ้ารู้สึกว่าช้า
+
+        // 1. ดึงรูปและเซฟลง Drive (ใช้ฟังก์ชันใน LineAPI.js)
+        const imageUrl = getMediaContent(msg.id); 
+
+        // 2. เตรียมข้อมูลบันทึก
+        const finalData = {
+          userId: userId,
+          branch: state.data.branch,
+          amount: state.data.amount,
+          imageUrl: imageUrl
+        };
+
+        // 3. บันทึกลง Sheet (ใช้ฟังก์ชันใน SheetService.js)
+        const summary = saveOilReport(finalData);
+
+        // 4. แจ้งผลสำเร็จ
+        const replyText = `✅ บันทึกสำเร็จ!\n\n📍 สาขา: ${summary.branch}\n💰 ยอดครั้งนี้: ${formatNumber(summary.latest)} บ.\n📊 สะสมเดือนนี้: ${formatNumber(summary.accumulated)} บ.\n🎯 เป้าเดือนนี้: ${formatNumber(summary.goal)} บ.`;
+        pushSimpleMessage(userId, replyText);
+
+        // 5. ล้างสถานะ (จบงาน)
+        clearReportState(userId);
+
+      } catch (error) {
+        Logger.log('Error in oil flow: ' + error.message);
+        pushSimpleMessage(userId, '❌ เกิดข้อผิดพลาดในการบันทึก: ' + error.message + '\nกรุณาลองส่งรูปใหม่อีกครั้งครับ');
+      }
+    } else {
+      pushSimpleMessage(userId, '⚠️ กรุณาส่งเป็น "รูปภาพ" เท่านั้นครับ 📸\n(หรือพิมพ์ "ยกเลิก" เพื่อทำรายการใหม่)');
+    }
+    return;
+  }
+}
+
+/**
+ * Handle Postback Event (Logic เดิม)
  */
 function handlePostbackEvent(event) {
   const userId = event.source?.userId;
@@ -218,13 +311,6 @@ function handlePostbackEvent(event) {
   try {
     sendLoadingAnimation(userId);
     
-    // ----------------------------------------------------
-    // 💡 NEW LOGIC: ไม่ต้องจัดการ Oil Report Postback แล้ว
-    // ----------------------------------------------------
-
-    // ----------------------------------------------------
-    // LOGIC เดิม: Dialogflow / Maintenance Mode
-    // ----------------------------------------------------
     if (SYSTEM_CONFIG.FEATURES.DIALOGFLOW_ENABLED) {
         const dialogflowResponse = queryDialogflow(postbackData, userId);
 
@@ -252,8 +338,7 @@ function handlePostbackEvent(event) {
         });
     }
 
-    // ✅ อัปเดตสถิติผู้ติดตาม (ต้องรันเสมอ)
-    updateFollowerInteraction(userId); // จาก FollowerService.gs
+    updateFollowerInteraction(userId);
 
   } catch (error) {
     Logger.log(`❌ Error in handlePostbackEvent: ${error.message}`);
@@ -261,13 +346,10 @@ function handlePostbackEvent(event) {
   }
 }
 
-// ... (ส่วนที่เหลือของฟังก์ชัน Follower Management, Media Handling และ Helper Functions)
-
 /**
- * Handle Follow Event (เพิ่มเพื่อน)
+ * Handle Follow Event (เพิ่มเพื่อน - Logic เดิม)
  */
 function handleFollowEvent(event) {
-  // ... (โค้ดเดิม)
   try {
     const userId = event.source?.userId;
     const timestamp = new Date(event.timestamp);
@@ -276,15 +358,11 @@ function handleFollowEvent(event) {
     
     Logger.log(`👤 New Follower: ${userId}`);
     
-    // 1. Get user profile (จาก LineAPI.gs)
     const profile = getUserProfile(userId); 
-    
-    // 2. Check if user followed before (จาก FollowerService.gs)
     const existingData = getFollowerData(userId);
     const followCount = existingData ? existingData.followCount + 1 : 1;
     const firstFollowDate = existingData ? existingData.firstFollowDate : timestamp;
     
-    // 3. Save follower data (จาก FollowerService.gs)
     saveFollower({
       userId: userId,
       displayName: profile.displayName || SYSTEM_CONFIG.DEFAULTS.UNKNOWN_DISPLAY_NAME,
@@ -301,7 +379,6 @@ function handleFollowEvent(event) {
       totalMessages: 0
     });
     
-    // 4. บันทึก Follow Event ลง Conversation
     saveConversation({
       userId: userId,
       userMessage: '[Follow Event]',
@@ -316,10 +393,9 @@ function handleFollowEvent(event) {
 }
 
 /**
- * Handle Unfollow Event (บล็อก/ลบเพื่อน)
+ * Handle Unfollow Event (บล็อก/ลบเพื่อน - Logic เดิม)
  */
 function handleUnfollowEvent(event) {
-  // ... (โค้ดเดิม)
   try {
     const userId = event.source?.userId;
     const timestamp = new Date(event.timestamp);
@@ -327,10 +403,7 @@ function handleUnfollowEvent(event) {
     if (!userId) return;
     
     Logger.log(`👋 User Unfollowed: ${userId}`);
-    
-    // Update follower status to blocked (จาก FollowerService.gs)
     updateFollowerStatus(userId, 'blocked', timestamp);
-    
     Logger.log('✅ Unfollow event processed');
   } catch (error) {
     Logger.log(`❌ Error in handleUnfollowEvent: ${error.message}`);
@@ -345,15 +418,11 @@ function handleUnfollowEvent(event) {
  * Handle Media Message (Image, Video, Audio, File, Location, Sticker)
  */
 function handleMediaMessage(event, mediaType, intentPrefix, aiResponseText) {
-  // ... (โค้ดเดิม)
   const userId = event.source?.userId;
   Logger.log(`🖼️ ${mediaType} message received`);
   if (userId) {
     sendLoadingAnimation(userId); 
     
-    // 1. **NO PUSH MESSAGE HERE**
-
-    // 2. บันทึก Event ลง Conversation
     saveConversation({
       userId: userId,
       userMessage: `[${mediaType} Message]`,
@@ -362,11 +431,7 @@ function handleMediaMessage(event, mediaType, intentPrefix, aiResponseText) {
       timestamp: new Date()
     });
     
-    // 3. อัปเดตสถิติผู้ติดตาม
     updateFollowerInteraction(userId);
-    
-    // 4. (Optional) Query Dialogflow ด้วย Text Fallback สำหรับ Media
-    // ...
   }
 }
 
@@ -387,7 +452,6 @@ function handleLocationMessage(event) {
   const location = event.message;
   if (userId && location) {
     const address = location.address || 'Unknown location';
-    
     handleMediaMessage(event, 'Location', 'media.location', `Location received: ${address}`);
   }
 }
@@ -396,9 +460,8 @@ function handleStickerMessage(event) {
   handleMediaMessage(event, 'Sticker', 'media.sticker', 'Sticker received');
 }
 
-
 // ========================================
-// 5. Helper Function (ย้ายจาก loading-animation.js)
+// 5. Helper Function
 // ========================================
 
 /**
@@ -410,7 +473,6 @@ function formatResponseForSheet(messages) {
   const responses = [];
   
   messages.forEach((msg, index) => {
-    // ใช้ Logic การ format เดิม
     if (msg.type === 'text') {
       responses.push(`[Text] ${msg.text}`);
       if (msg.quickReply && msg.quickReply.items) {

@@ -171,5 +171,72 @@ function updateRow(sheet, rowNumber, values) {
   }
 }
 
+// ========================================
+// 🛢️ OIL REPORT FUNCTIONS (ADD TO SHEETSERVICE.GS)
+// ========================================
+
+/**
+ * Save Oil Report and Calculate Summary
+ * บันทึกรายงานน้ำมันเก่าและคำนวณยอดสรุป
+ * @param {Object} data - { userId, branch, amount, imageUrl }
+ * @return {Object} Summary data { branch, latest, accumulated, remaining, goal }
+ */
+function saveOilReport(data) {
+  try {
+    const sheetName = SHEET_CONFIG.SHEETS.OIL_REPORTS; // ต้องตรงกับ Config.js ('Oil_Reports')
+    // ตรวจสอบว่ามีชีตนี้หรือไม่ ถ้าไม่มีให้สร้าง
+    const sheet = getOrCreateSheet(sheetName, SHEET_CONFIG.COLUMNS.OIL_REPORTS);
+    
+    const timestamp = new Date();
+    const monthKey = Utilities.formatDate(timestamp, 'Asia/Bangkok', 'yyyy-MM'); // ใช้ Group by เดือน
+    
+    // 1. บันทึกข้อมูลลง Sheet
+    // Columns: [timestamp, branch, amount, image_url, staff_user_id, month_key]
+    sheet.appendRow([
+      timestamp,
+      data.branch,
+      data.amount,
+      data.imageUrl,
+      data.userId,
+      monthKey
+    ]);
+    
+    Logger.log(`💾 Oil Report saved for ${data.branch}: ${data.amount} THB`);
+
+    // 2. คำนวณยอดสรุป (Summary Calculation)
+    const reportData = getSheetDataAsArray(sheetName);
+    
+    // กรองเฉพาะสาขาและเดือนปัจจุบัน
+    const currentMonthData = reportData.filter(row => {
+      // แปลง Timestamp ใน Sheet กลับเป็น Date object เพื่อหาเดือน
+      // หรือใช้ month_key ที่เราเพิ่งสร้างก็ได้ (ถ้ามี column นี้)
+      // เพื่อความชัวร์ ใช้ key ที่เราสร้าง row ล่าสุด
+      return row['branch'] === data.branch && 
+             row['month_key'] === monthKey;
+    });
+
+    // ยอดรวมสะสมของสาขานี้ ในเดือนนี้
+    const totalAccumulated = currentMonthData.reduce((sum, row) => {
+      return sum + (parseFloat(row['amount']) || 0);
+    }, 0);
+
+    // เป้าหมาย (จาก Config)
+    const goal = SYSTEM_CONFIG.DEFAULTS.OIL_REPORT_GOAL || 10000;
+    const remaining = Math.max(0, goal - totalAccumulated);
+
+    return {
+      branch: data.branch,
+      latest: data.amount,
+      accumulated: totalAccumulated,
+      remaining: remaining,
+      goal: goal
+    };
+
+  } catch (error) {
+    Logger.log(`❌ Error saving oil report: ${error.message}`);
+    throw new Error(`ไม่สามารถบันทึกข้อมูลลง Sheet ได้: ${error.message}`);
+  }
+}
+
 // NOTE: ฟังก์ชันอื่น ๆ ที่ใช้ saveConversation ใน EventHandler.js ไม่ต้องแก้ไข
 // เพราะเราได้ปรับปรุง saveConversation ให้ทำงานอย่างมีประสิทธิภาพแล้ว
