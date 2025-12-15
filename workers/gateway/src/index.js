@@ -2,9 +2,11 @@
 
 import { validateSignature } from '@line/bot-sdk';
 
-// 📌 รายการ Webhook Endpoints ทั้งหมด
-// แก้ไข: ใช้ env.GAS_ENDPOINT แทนการ hardcode list
+// 📌 GAS Endpoint (Primary)
 const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwFkTziOqmAyk6SFbKr4d1horasTiseY4SL9HZKEpe4tgYt-RZEk1fUuiCxtEoS7A-p/exec';
+
+// 📌 Webhook.site Endpoint (Debug/Monitor)
+const WEBHOOK_SITE_URL = 'https://webhook.site/581662c1-e473-45d4-bf27-b8322220f377';
 
 export default {
   async fetch(request, env, ctx) {
@@ -20,14 +22,14 @@ export default {
       return new Response('No signature', { status: 400 });
     }
 
-    // อ่าน body เป็น text เพื่อใช้ validate และ parse
+    // อ่าน body เป็น text
     const body = await request.text();
     
-    // 💡 V2.1 Security Fix: เปิดใช้งาน Signature Validation
+    // ✅ Validate Signature
     const channelSecret = env.LINE_CHANNEL_SECRET;
     
     if (!channelSecret) {
-      console.error('❌ LINE_CHANNEL_SECRET is NOT set in Cloudflare Secrets!');
+      console.error('❌ LINE_CHANNEL_SECRET is NOT set!');
       return new Response('Server Error: Missing Secret', { status: 500 });
     }
     
@@ -36,7 +38,7 @@ export default {
       
       if (!isValid) {
         console.log('❌ Invalid signature. Request rejected.');
-        return new Response('Invalid signature', { status: 403 }); // 403 Forbidden
+        return new Response('Invalid signature', { status: 403 });
       }
     } catch (error) {
       console.error('❌ Signature Validation Error:', error.message);
@@ -47,42 +49,71 @@ export default {
 
     const eventData = JSON.parse(body);
 
-    // บันทึก User Message ลง D1 (Optional)
+    // 💾 บันทึกลง D1 (Optional)
     if (env.DB) {
       ctx.waitUntil(saveUserMessage(env.DB, eventData));
     }
 
-    // 🎯 ส่งต่อไปยัง GAS Endpoint
-    // 💡 ใช้ env.GAS_ENDPOINT ที่ตั้งค่าใน wrangler.toml/Secrets
-    const endpointToForward = env.GAS_ENDPOINT || GAS_ENDPOINT;
-    console.log(`🚀 Forwarding to GAS Endpoint: ${endpointToForward}`);
-    
-    ctx.waitUntil(
-      (async () => {
-        try {
-            const response = await fetch(endpointToForward, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-line-signature': signature,
-                'user-agent': 'line-webhook-gateway'
-              },
-              body: body
-            });
+    // 🎯 ส่งต่อไปยัง Multiple Endpoints
+    const endpoints = [
+      { 
+        name: 'GAS', 
+        url: env.GAS_ENDPOINT || GAS_ENDPOINT,
+        enabled: true
+      },
+      { 
+        name: 'Webhook.site', 
+        url: env.WEBHOOK_SITE_URL || WEBHOOK_SITE_URL,
+        enabled: env.ENABLE_WEBHOOK_SITE !== 'false' // ปิดได้ด้วย env var
+      }
+    ];
 
-            console.log(`✅ Forward Success: ${response.status} → ${response.statusText}`);
-          } catch (err) {
-            console.error('❌ Forward Failed to GAS:', err.message);
-          }
-      })()
+    // ส่งแบบ parallel
+    ctx.waitUntil(
+      forwardToEndpoints(endpoints, body, signature)
     );
 
     return new Response('OK', { status: 200 });
   }
 };
 
+/**
+ * ส่ง webhook ไปยังหลาย endpoints พร้อมกัน
+ */
+async function forwardToEndpoints(endpoints, body, signature) {
+  const promises = endpoints
+    .filter(ep => ep.enabled)
+    .map(async (endpoint) => {
+      try {
+        console.log(`🚀 Forwarding to ${endpoint.name}: ${endpoint.url}`);
+        
+        const response = await fetch(endpoint.url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-line-signature': signature,
+            'user-agent': 'line-webhook-gateway'
+          },
+          body: body
+        });
+
+        console.log(`✅ ${endpoint.name} Success: ${response.status}`);
+        return { name: endpoint.name, success: true, status: response.status };
+        
+      } catch (err) {
+        console.error(`❌ ${endpoint.name} Failed:`, err.message);
+        return { name: endpoint.name, success: false, error: err.message };
+      }
+    });
+
+  const results = await Promise.allSettled(promises);
+  console.log('📊 Forward Results:', JSON.stringify(results, null, 2));
+}
+
+/**
+ * บันทึก User Message ลง D1
+ */
 async function saveUserMessage(db, eventData) {
-  // ... (โค้ดเดิม)
   try {
     if (!eventData.events || eventData.events.length === 0) return;
 

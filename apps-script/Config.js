@@ -101,7 +101,7 @@ const SYSTEM_CONFIG = {
   // 💡 NEW: URLS สำหรับ Web App ต่างๆ
   URLS: {
     // Placeholder: URL นี้จะต้องถูกอัปเดตหลังจาก Deploy Web App (ขั้นตอน 3.3)
-    OIL_REPORT_FORM: 'https://script.google.com/macros/s/AKfycbxEgtnl4WFLSIqYsHRGxTKsn6JOkSnF6jMmpht3AHm_CuXtIoGwcRN6DvUOaQVpe7w/exec',
+    OIL_REPORT_FORM: 'https://script.google.com/macros/s/AKfycbwFkTziOqmAyk6SFbKr4d1horasTiseY4SL9HZKEpe4tgYt-RZEk1fUuiCxtEoS7A-p/exec',
   },
 
   // Cache Settings (ใช้ใน FollowerService.js)

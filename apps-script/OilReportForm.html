@@ -12,7 +12,7 @@
     input[type="number"], input[type="file"], select { width: 100%; padding: 10px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
     button { background-color: #00b900; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; }
     button:disabled { background-color: #ccc; cursor: not-allowed; }
-    .status { margin-top: 15px; padding: 10px; border-radius: 4px; text-align: center; }
+    .status { margin-top: 15px; padding: 10px; border-radius: 4px; text-align: center; white-space: pre-wrap; }
     .error { background-color: #fdd; color: #d00; border: 1px solid #f00; }
     .success { background-color: #dfd; color: #0a0; border: 1px solid #0f0; }
     .branch-info { background-color: #e6f7ff; padding: 10px; border-radius: 4px; margin-bottom: 20px; text-align: center; font-weight: bold; }
@@ -28,7 +28,7 @@
       <input type="hidden" id="branch" name="branch" value="<?= branch ?>">
 
       <label for="amount">ยอดขายน้ำมันเก่า (บาท)</label>
-      <input type="number" id="amount" name="amount" required placeholder="เช่น 350.50">
+      <input type="number" id="amount" name="amount" required placeholder="เช่น 350.50" step="0.01">
       
       <label for="image">อัปโหลดรูปบิล (PNG/JPG)</label>
       <input type="file" id="image" name="image" accept="image/png, image/jpeg" required>
@@ -40,10 +40,8 @@
   </div>
   
   <script>
-    // 💡 JavaScript Logic for form submission
+    console.log('🔍 Script loaded - checking values...');
     
-    // 💡 REMOVED: ไม่ต้องใช้ getQueryParam แล้ว เพราะค่าอยู่ใน input[type="hidden"]
-
     const userIdInput = document.getElementById('userId');
     const branchInput = document.getElementById('branch');
     const branchDisplay = document.getElementById('branch-display');
@@ -51,12 +49,12 @@
     const form = document.getElementById('reportForm');
     const statusMessage = document.getElementById('statusMessage');
 
-    // 1. Initialize form fields from Hidden Input values
-    // 💡 FIX: ดึงค่าจาก input ที่ถูก set ด้วย Scriptlet
+    // Initialize form fields
     const hiddenUserId = userIdInput.value;
     const hiddenBranch = branchInput.value;
+    
+    console.log('Hidden values:', { userId: hiddenUserId, branch: hiddenBranch });
 
-    // ตรวจสอบว่าค่าถูกส่งมาจาก GAS Backend หรือไม่
     if (hiddenUserId && hiddenBranch) {
       branchDisplay.textContent = `สาขาที่รายงาน: ${hiddenBranch}`;
       submitBtn.disabled = false;
@@ -65,40 +63,81 @@
       submitBtn.disabled = true;
     }
 
-    // 2. Handle form submission
+    // Handle form submission
     form.addEventListener('submit', function(e) {
       e.preventDefault();
+      
+      console.log('📤 Form submitted');
       
       statusMessage.style.display = 'none';
       submitBtn.disabled = true;
       submitBtn.textContent = 'กำลังบันทึก...';
 
       const file = document.getElementById('image').files[0];
+      const amount = document.getElementById('amount').value;
+      
+      console.log('Form data:', {
+        userId: hiddenUserId,
+        branch: hiddenBranch,
+        amount: amount,
+        fileExists: !!file
+      });
+      
       if (!file) {
         showMessage('❌ กรุณาแนบรูปบิล', 'error');
         submitBtn.disabled = false;
         submitBtn.textContent = 'บันทึกรายงาน';
         return;
       }
-      
-      // Construct form data object
-      const formData = new FormData(form);
 
-      // 💡 Call Google Apps Script backend function
-      google.script.run
-        .withSuccessHandler(onSuccess)
-        .withFailureHandler(onFailure)
-        .processWebReport(formData); 
+      // Convert file to Base64
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        console.log('📷 File converted to Base64');
+        
+        const base64Data = event.target.result.split(',')[1];
+        const mimeType = file.type;
+        
+        console.log('Calling backend with:', {
+          userId: hiddenUserId,
+          branch: hiddenBranch,
+          amount: parseFloat(amount),
+          mimeType: mimeType,
+          fileName: file.name
+        });
+        
+        // ✅ CRITICAL FIX: Send as individual parameters
+        google.script.run
+          .withSuccessHandler(onSuccess)
+          .withFailureHandler(onFailure)
+          .processWebReport(
+            hiddenUserId,
+            hiddenBranch,
+            parseFloat(amount),
+            base64Data,
+            mimeType,
+            file.name
+          );
+      };
+      
+      reader.onerror = function() {
+        console.error('❌ File read error');
+        showMessage('❌ ไม่สามารถอ่านไฟล์รูปภาพได้', 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'บันทึกรายงาน';
+      };
+      
+      reader.readAsDataURL(file);
     });
     
     function showMessage(msg, type) {
-        statusMessage.textContent = msg;
-        statusMessage.className = `status ${type}`;
-        statusMessage.style.display = 'block';
+      statusMessage.textContent = msg;
+      statusMessage.className = `status ${type}`;
+      statusMessage.style.display = 'block';
     }
 
-    // 3. Handle successful response from GAS
     function onSuccess(summary) {
+      console.log('✅ Success:', summary);
       submitBtn.textContent = 'บันทึกสำเร็จ!';
       
       let msg = `✅ บันทึกรายงานยอดขายสำเร็จ\n`;
@@ -108,29 +147,25 @@
       msg += `ยอดคงเหลือ: ${formatCurrency(summary.remaining)} (จากเป้า ${formatCurrency(summary.goal)})`;
 
       showMessage(msg, 'success');
-      form.reset(); // Clear form fields
-      // 💡 FIX: ต้อง set branch และ userId กลับเข้าไปใหม่หลัง reset
+      form.reset();
       userIdInput.value = hiddenUserId;
       branchInput.value = hiddenBranch;
       
       submitBtn.disabled = false;
     }
 
-    // 4. Handle failed response from GAS
     function onFailure(error) {
-      console.error(error);
+      console.error('❌ Failure:', error);
       submitBtn.textContent = 'บันทึกรายงาน';
-      showMessage(`❌ เกิดข้อผิดพลาดในการบันทึก: ${error.message || error}`, 'error');
+      showMessage(`❌ เกิดข้อผิดพลาด: ${error.message || error}`, 'error');
       submitBtn.disabled = false;
     }
     
     function formatCurrency(amount) {
-        return amount.toLocaleString('th-TH', { 
-            style: 'currency', 
-            currency: 'THB',
-            minimumFractionDigits: 2, 
-            maximumFractionDigits: 2 
-        });
+      return amount.toLocaleString('th-TH', { 
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2 
+      }) + ' บาท';
     }
   </script>
 </body>
