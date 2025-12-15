@@ -1,5 +1,5 @@
 // ========================================
-// 🔧 CONFIG.JS - MAIN CONFIGURATION (V2.2 - Web Form Ready)
+// 🔧 CONFIG.JS - MAIN CONFIGURATION (V2.3 - Chat Flow Optimized)
 // ========================================
 // ไฟล์นี้เก็บการตั้งค่าทั้งหมดของระบบ
 // ดึงค่าสำคัญจาก Script Properties เพื่อความปลอดภัย
@@ -19,7 +19,9 @@ const LINE_CONFIG = {
     PUSH_MESSAGE: 'https://api.line.me/v2/bot/message/push',
     REPLY_MESSAGE: 'https://api.line.me/v2/bot/message/reply',
     GET_PROFILE: 'https://api.line.me/v2/bot/profile',
-    LOADING_ANIMATION: 'https://api.line.me/v2/bot/chat/loading/start'
+    LOADING_ANIMATION: 'https://api.line.me/v2/bot/chat/loading/start',
+    // 💡 NEW: Mark as Read API
+    MARK_AS_READ: 'https://api.line.me/v2/bot/chat/markAsRead'
   },
   
   // Loading Animation Settings
@@ -47,7 +49,7 @@ const SHEET_CONFIG = {
     RICH_MENU_STATS: 'RichMenu_Stats',
     DASHBOARD: 'Dashboard',
     // 💡 NEW: เพิ่มชื่อ Sheet สำหรับ Oil Report
-    OIL_REPORTS: 'Oil_Reports' //
+    OIL_REPORTS: 'Oil_Reports' 
   },
   
   // Column Structures
@@ -82,7 +84,7 @@ const SHEET_CONFIG = {
         'image_url',
         'staff_user_id',
         'month_key'
-    ] //
+    ] 
   }
 };
 
@@ -98,11 +100,8 @@ const SYSTEM_CONFIG = {
     FOLLOWER_TRACKING: true          
   },
   
-  // 💡 NEW: URLS สำหรับ Web App ต่างๆ
-  URLS: {
-    // Placeholder: URL นี้จะต้องถูกอัปเดตหลังจาก Deploy Web App (ขั้นตอน 3.3)
-    OIL_REPORT_FORM: 'https://script.google.com/macros/s/AKfycbwFkTziOqmAyk6SFbKr4d1horasTiseY4SL9HZKEpe4tgYt-RZEk1fUuiCxtEoS7A-p/exec',
-  },
+  // 💡 NEW: Delay setting for Asynchronous Tasks
+  ASYNC_DELAY_MS: 100, // หน่วงเวลาการประมวลผลเบื้องหลัง (millisecond)
 
   // Cache Settings (ใช้ใน FollowerService.js)
   CACHE_SETTINGS: {
@@ -126,9 +125,10 @@ const SYSTEM_CONFIG = {
     FOLLOWER_TAGS: 'new-customer',
     UNKNOWN_DISPLAY_NAME: 'Unknown',
     UNKNOWN_LANGUAGE: 'unknown',
+    UNKNOWN_LANGUAGE: 'unknown',
     DIALOGFLOW_CONFIDENCE_THRESHOLD: 0.65,
     // 💡 NEW: กำหนดเป้าหมายสำหรับ Oil Report (ตัวอย่าง 10,000 บาท)
-    OIL_REPORT_GOAL: 10000 //
+    OIL_REPORT_GOAL: 10000 
   }
 };
 
@@ -224,8 +224,8 @@ function testConfiguration() {
   
   Logger.log('\n🛢️ Oil Report Configuration:');
   Logger.log(`  Goal: ${SYSTEM_CONFIG.DEFAULTS.OIL_REPORT_GOAL}`);
-  Logger.log(`  Form URL: ${SYSTEM_CONFIG.URLS.OIL_REPORT_FORM}`);
-  
+  Logger.log(`  Async Delay: ${SYSTEM_CONFIG.ASYNC_DELAY_MS}ms`);
+
   Logger.log('\n🔍 Running Validation:');
   validateConfig();
   

@@ -1,5 +1,5 @@
 // ========================================
-// 🔎 OCRSERVICE.GS - IMAGE TO TEXT PROCESSING
+// 🔎 OCRSERVICE.GS - IMAGE TO TEXT PROCESSING (V2.1 - Added Retry)
 // ========================================
 // ไฟล์นี้จัดการการประมวลผลรูปภาพ (เช่น สลิป) ด้วย OCR
 
@@ -13,58 +13,67 @@ function detectTextFromImage(imageBlob) {
   try {
     Logger.log('🔎 Calling Cloud Vision API for OCR...');
     
-    // ⚠️ Note: ต้องเปิดใช้งาน Cloud Vision API ใน Google Cloud Console
-    
-    // 1. แปลง Blob เป็น Base64
-    const base64Image = Utilities.base64Encode(imageBlob.getBytes());
-    
-    // 2. สร้าง Payload สำหรับ Vision API
-    const payload = {
-      requests: [{
-        image: {
-          content: base64Image
-        },
-        features: [{
-          type: 'TEXT_DETECTION' // ฟีเจอร์ OCR พื้นฐาน
-        }]
-      }]
-    };
-    
-    // 3. ดึง OAuth Token (ต้องเปิดบริการ Drive API ใน GAS Services เพื่อให้สิทธิ์)
-    const token = ScriptApp.getOAuthToken();
-    
-    const options = {
-      method: 'post',
-      contentType: 'application/json',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    };
-    
-    // 4. เรียกใช้ Vision API
-    const url = 'https://vision.googleapis.com/v1/images:annotate';
-    const response = UrlFetchApp.fetch(url, options);
-    const result = JSON.parse(response.getContentText());
-    
-    // 5. ประมวลผลผลลัพธ์
-    if (result.responses && result.responses.length > 0) {
-      const annotations = result.responses[0].textAnnotations;
-      if (annotations && annotations.length > 0) {
-        // textAnnotations[0].description คือข้อความทั้งหมดที่ถูกอ่าน
-        const fullText = annotations[0].description;
-        Logger.log('✅ OCR Success. Detected length: ' + fullText.length);
-        return fullText;
-      }
-    }
-    
-    Logger.log('⚠️ OCR failed to detect text.');
-    return '';
+    // 1. ใช้ retry ครอบ Logic การเรียก API ทั้งหมด
+    const fullText = retry(() => {
+        Logger.log('🔄 Attempting Cloud Vision API call...');
+
+        // ⚠️ Note: ต้องเปิดใช้งาน Cloud Vision API ใน Google Cloud Console
+        
+        // 1. แปลง Blob เป็น Base64
+        const base64Image = Utilities.base64Encode(imageBlob.getBytes());
+        
+        // 2. สร้าง Payload สำหรับ Vision API
+        const payload = {
+          requests: [{
+            image: {
+              content: base64Image
+            },
+            features: [{
+              type: 'TEXT_DETECTION' // ฟีเจอร์ OCR พื้นฐาน
+            }]
+          }]
+        };
+        
+        // 3. ดึง OAuth Token (ต้องเปิดบริการ Drive API ใน GAS Services เพื่อให้สิทธิ์)
+        const token = ScriptApp.getOAuthToken();
+        
+        const options = {
+          method: 'post',
+          contentType: 'application/json',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          payload: JSON.stringify(payload),
+          muteHttpExceptions: true
+        };
+        
+        // 4. เรียกใช้ Vision API
+        const url = 'https://vision.googleapis.com/v1/images:annotate';
+        const response = UrlFetchApp.fetch(url, options);
+        const result = JSON.parse(response.getContentText());
+        
+        // 5. ประมวลผลผลลัพธ์
+        if (result.responses && result.responses.length > 0) {
+          const annotations = result.responses[0].textAnnotations;
+          if (annotations && annotations.length > 0) {
+            // textAnnotations[0].description คือข้อความทั้งหมดที่ถูกอ่าน
+            const detectedText = annotations[0].description;
+            Logger.log('✅ OCR Success. Detected length: ' + detectedText.length);
+            return detectedText;
+          }
+        }
+        
+        // ถ้า API สำเร็จ แต่ไม่พบข้อความ ให้ Throw error เพื่อให้ retry
+        throw new Error('OCR failed to detect text.');
+        
+    }, 3, 3000); // Retry 3 ครั้ง, 3 วินาที delay
+
+    return fullText;
     
   } catch (error) {
-    Logger.log(`❌ OCR Service Error: ${error.message}`);
-    // ตรวจสอบว่าเปิดใช้งาน Vision API ใน GAS Service หรือยัง
+    // Error ที่นี่คือ error หลังจากที่ retry ครบจำนวนครั้งแล้ว
+    Logger.log(`❌ OCR Service Error after retries: ${error.message}`);
+    // ตรวจสอบว่าเปิดใช้งาน Vision API ใน Google Cloud Project และ GAS Service หรือยัง
     return `[OCR_ERROR: ${error.message}]`;
   }
 }

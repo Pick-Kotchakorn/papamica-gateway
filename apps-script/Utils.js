@@ -7,8 +7,7 @@
 /**
  * Format Date to Thai
  * แปลง Date เป็นรูปแบบภาษาไทย
- * 
- * @param {Date} date - Date object
+ * * @param {Date} date - Date object
  * @param {boolean} includeTime - Include time (default: false)
  * @return {string} Formatted date string
  */
@@ -41,8 +40,7 @@ function formatDateThai(date, includeTime = false) {
 /**
  * Format Number with Commas
  * จัดรูปแบบตัวเลขให้มีคอมม่า
- * 
- * @param {number} num - Number to format
+ * * @param {number} num - Number to format
  * @return {string} Formatted number string
  */
 function formatNumber(num) {
@@ -58,8 +56,7 @@ function formatNumber(num) {
 /**
  * Calculate Percentage
  * คำนวณเปอร์เซ็นต์
- * 
- * @param {number} part - Part value
+ * * @param {number} part - Part value
  * @param {number} total - Total value
  * @param {number} decimals - Decimal places (default: 2)
  * @return {number} Percentage
@@ -78,8 +75,7 @@ function calculatePercentage(part, total, decimals = 2) {
 /**
  * Truncate Text
  * ตัดข้อความให้สั้นลง
- * 
- * @param {string} text - Text to truncate
+ * * @param {string} text - Text to truncate
  * @param {number} maxLength - Maximum length (default: 100)
  * @param {string} suffix - Suffix to add (default: '...')
  * @return {string} Truncated text
@@ -98,8 +94,7 @@ function truncateText(text, maxLength = 100, suffix = '...') {
 /**
  * Generate Random ID
  * สร้าง Random ID
- * 
- * @param {number} length - ID length (default: 8)
+ * * @param {number} length - ID length (default: 8)
  * @return {string} Random ID
  */
 function generateRandomId(length = 8) {
@@ -119,8 +114,7 @@ function generateRandomId(length = 8) {
 /**
  * Sleep/Wait Function
  * หยุดการทำงานชั่วคราว
- * 
- * @param {number} milliseconds - Time to wait in milliseconds
+ * * @param {number} milliseconds - Time to wait in milliseconds
  */
 function sleep(milliseconds) {
   Utilities.sleep(milliseconds);
@@ -129,8 +123,7 @@ function sleep(milliseconds) {
 /**
  * Retry Function
  * ลองทำงานซ้ำถ้าเกิด error
- * 
- * @param {Function} func - Function to retry
+ * * @param {Function} func - Function to retry
  * @param {number} maxRetries - Maximum retries (default: 3)
  * @param {number} delay - Delay between retries in ms (default: 1000)
  * @return {*} Function result or null
@@ -159,8 +152,7 @@ function retry(func, maxRetries = 3, delay = 1000) {
 /**
  * Safe Parse Float
  * แปลงเป็น Float อย่างปลอดภัย
- * 
- * @param {*} value - Value to parse
+ * * @param {*} value - Value to parse
  * @param {number} defaultValue - Default value (default: 0)
  * @return {number} Parsed number
  */
@@ -176,8 +168,7 @@ function safeParseFloat(value, defaultValue = 0) {
 /**
  * Safe Parse Int
  * แปลงเป็น Integer อย่างปลอดภัย
- * 
- * @param {*} value - Value to parse
+ * * @param {*} value - Value to parse
  * @param {number} defaultValue - Default value (default: 0)
  * @return {number} Parsed number
  */
@@ -193,8 +184,7 @@ function safeParseInt(value, defaultValue = 0) {
 /**
  * Is Valid Email
  * ตรวจสอบว่าเป็น Email ที่ถูกต้องหรือไม่
- * 
- * @param {string} email - Email address
+ * * @param {string} email - Email address
  * @return {boolean} Valid or not
  */
 function isValidEmail(email) {
@@ -209,8 +199,7 @@ function isValidEmail(email) {
 /**
  * Is Valid URL
  * ตรวจสอบว่าเป็น URL ที่ถูกต้องหรือไม่
- * 
- * @param {string} url - URL string
+ * * @param {string} url - URL string
  * @return {boolean} Valid or not
  */
 function isValidUrl(url) {
@@ -225,8 +214,7 @@ function isValidUrl(url) {
 /**
  * Sanitize String
  * ทำความสะอาดข้อความ (ลบอักขระพิเศษ)
- * 
- * @param {string} str - String to sanitize
+ * * @param {string} str - String to sanitize
  * @return {string} Sanitized string
  */
 function sanitizeString(str) {
@@ -244,8 +232,7 @@ function sanitizeString(str) {
 /**
  * Get Date Range
  * สร้างช่วงวันที่
- * 
- * @param {number} days - Number of days
+ * * @param {number} days - Number of days
  * @param {Date} endDate - End date (default: today)
  * @return {Object} Object with startDate and endDate
  */
@@ -271,8 +258,7 @@ function getDateRange(days, endDate = new Date()) {
 /**
  * Deep Clone Object
  * สำเนา Object แบบ Deep Copy
- * 
- * @param {Object} obj - Object to clone
+ * * @param {Object} obj - Object to clone
  * @return {Object} Cloned object
  */
 function deepClone(obj) {
@@ -287,8 +273,7 @@ function deepClone(obj) {
 /**
  * Merge Objects
  * รวม Objects เข้าด้วยกัน
- * 
- * @param {...Object} objects - Objects to merge
+ * * @param {...Object} objects - Objects to merge
  * @return {Object} Merged object
  */
 function mergeObjects(...objects) {
@@ -303,8 +288,7 @@ function mergeObjects(...objects) {
 /**
  * Log with Timestamp
  * Log พร้อมเวลา
- * 
- * @param {string} message - Log message
+ * * @param {string} message - Log message
  * @param {string} level - Log level (INFO/WARN/ERROR)
  */
 function logWithTimestamp(message, level = 'INFO') {
@@ -321,8 +305,7 @@ function logWithTimestamp(message, level = 'INFO') {
 /**
  * Create Error Response
  * สร้าง Error Response Object
- * 
- * @param {string} message - Error message
+ * * @param {string} message - Error message
  * @param {string} code - Error code
  * @param {Object} details - Additional details
  * @return {Object} Error response object
@@ -342,8 +325,7 @@ function createErrorResponse(message, code = 'UNKNOWN_ERROR', details = {}) {
 /**
  * Create Success Response
  * สร้าง Success Response Object
- * 
- * @param {*} data - Response data
+ * * @param {*} data - Response data
  * @param {string} message - Success message
  * @return {Object} Success response object
  */
@@ -359,8 +341,7 @@ function createSuccessResponse(data, message = 'Success') {
 /**
  * Batch Process Array
  * ประมวลผล Array เป็นชุดๆ
- * 
- * @param {Array} array - Array to process
+ * * @param {Array} array - Array to process
  * @param {number} batchSize - Batch size
  * @param {Function} processor - Processor function
  */
@@ -381,6 +362,73 @@ function batchProcess(array, batchSize, processor) {
     throw error;
   }
 }
+
+// ========================================
+// 📦 EVENT QUEUE UTILITIES (สำหรับ Asynchronous Processing)
+// ========================================
+
+const EVENT_QUEUE_KEY = 'ASYNC_EVENT_QUEUE';
+const QUEUE_CACHE = CacheService.getScriptCache();
+
+/**
+ * Enqueue an event for asynchronous processing.
+ * @param {Object} event - LINE Webhook Event object
+ */
+function enqueueEvent(event) {
+  try {
+    // 1. ดึงคิวปัจจุบัน (ถ้ามี)
+    let queueString = QUEUE_CACHE.get(EVENT_QUEUE_KEY);
+    let queue = queueString ? JSON.parse(queueString) : [];
+    
+    // 2. เพิ่ม Event ใหม่เข้าไปในคิว
+    // เราเก็บ event.timestamp และ event.source.userId ไว้ด้วยเพื่อเป็น reference
+    const eventLog = {
+      timestamp: new Date().toISOString(),
+      eventType: event.type,
+      event: event // เก็บ Object event จริง
+    };
+    
+    queue.push(JSON.stringify(eventLog));
+    
+    // 3. บันทึกคิวกลับเข้า Cache (TTL 1 ชั่วโมง)
+    QUEUE_CACHE.put(EVENT_QUEUE_KEY, JSON.stringify(queue), 3600);
+    Logger.log(`✅ Event enqueued. Queue size: ${queue.length}`);
+    
+  } catch (error) {
+    Logger.log(`❌ Error enqueueing event: ${error.message}`);
+  }
+}
+
+/**
+ * Dequeue all events for processing and clear the queue.
+ * @return {Array<Object>} Array of LINE Webhook Event objects
+ */
+function dequeueAllEvents() {
+  try {
+    const queueString = QUEUE_CACHE.get(EVENT_QUEUE_KEY);
+    
+    if (!queueString) {
+      return [];
+    }
+    
+    // ล้างคิวทันทีเพื่อป้องกันการประมวลผลซ้ำ
+    QUEUE_CACHE.remove(EVENT_QUEUE_KEY);
+    Logger.log('🗑️ Cleared event queue.');
+    
+    // แปลงข้อมูลจาก String Array กลับเป็น Object Array
+    const rawEvents = JSON.parse(queueString);
+    const events = rawEvents.map(e => JSON.parse(e));
+    
+    Logger.log(`📥 Dequeued ${events.length} events for processing.`);
+    // คืนค่า event object จริง (.event)
+    return events.map(e => e.event);
+    
+  } catch (error) {
+    Logger.log(`❌ Error dequeueing events: ${error.message}`);
+    return [];
+  }
+}
+
 
 /**
  * Test Utility Functions

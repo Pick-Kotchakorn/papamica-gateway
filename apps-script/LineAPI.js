@@ -1,5 +1,5 @@
 // ========================================
-// 📱 LINEAPI.GS - LINE API WRAPPER (V2.1 - Media Content Added)
+// 📱 LINEAPI.GS - LINE API WRAPPER (V2.3 - MarkAsRead Added)
 // ========================================
 // ไฟล์นี้จัดการการเชื่อมต่อกับ LINE API
 
@@ -167,6 +167,56 @@ function getUserProfile(userId) {
 }
 
 // ========================================
+// 💡 NEW FUNCTION: Mark as Read
+// ========================================
+
+/**
+ * Mark messages from a user as read (displaying the 'Read' indicator).
+ * @param {string} readToken - The markAsReadToken from the webhook event.
+ * @return {boolean} Success status
+ */
+function markAsRead(readToken) {
+  try {
+    if (!readToken) {
+      Logger.log('⚠️ Missing markAsReadToken, skipping markAsRead.');
+      return false;
+    }
+    
+    // ใช้ retry ครอบ Logic การเรียก API ทั้งหมด
+    return retry(() => {
+        const url = LINE_CONFIG.API_ENDPOINTS.MARK_AS_READ;
+        const payload = { markAsReadToken: readToken };
+
+        const options = {
+          method: 'post',
+          contentType: 'application/json',
+          headers: {
+            'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN
+          },
+          payload: JSON.stringify(payload),
+          muteHttpExceptions: true
+        };
+        
+        const response = UrlFetchApp.fetch(url, options);
+        const statusCode = response.getResponseCode();
+        
+        if (statusCode !== 200) {
+            // Throw เพื่อให้ retry function ทำงานซ้ำ
+            throw new Error(`MarkAsRead API failed: ${statusCode} - ${response.getContentText()}`);
+        }
+        
+        Logger.log('✅ MarkAsRead successful.');
+        return true;
+        
+    }, 3, 500); // Retry 3 ครั้งด้วย 500ms delay
+
+  } catch (error) {
+    Logger.log(`❌ Error in markAsRead after retries: ${error.message}`);
+    return false;
+  }
+}
+
+// ========================================
 // 💡 NEW FUNCTION: Get Media Content (สำหรับ Oil Report)
 // ========================================
 
@@ -179,44 +229,49 @@ function getUserProfile(userId) {
 function getMediaContent(messageId) {
   // 💡 Note: ฟังก์ชันนี้ต้องเปิดใช้งาน Drive API ใน GAS Services
   try {
-    const url = `https://api-data.line.me/v2/bot/message/${messageId}/content`;
-    const options = {
-      method: 'get',
-      headers: {
-        'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN,
-      },
-      muteHttpExceptions: true,
-    };
+    // ใช้ retry ครอบ Logic ทั้งหมดเพื่อจัดการความล้มเหลวของ Network I/O
+    return retry(() => {
+        Logger.log(`🔎 Attempting to fetch media content for ID: ${messageId}`);
 
-    const response = UrlFetchApp.fetch(url, options);
-    const statusCode = response.getResponseCode();
+        const url = `https://api-data.line.me/v2/bot/message/${messageId}/content`;
+        const options = {
+          method: 'get',
+          headers: {
+            'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN,
+          },
+          muteHttpExceptions: true,
+        };
 
-    if (statusCode !== 200) {
-      Logger.log(`❌ Failed to get media content: ${statusCode} - ${response.getContentText()}`);
-      throw new Error(`LINE Media API error: ${statusCode}`);
-    }
+        const response = UrlFetchApp.fetch(url, options);
+        const statusCode = response.getResponseCode();
 
-    // 1. Get Blob
-    const blob = response.getBlob();
-    const fileName = `oil_report_bill_${messageId}_${new Date().getTime()}.jpg`;
-    blob.setName(fileName);
-    
-    // 2. Determine Folder ID
-    // ⚠️ ต้องเพิ่ม OIL_REPORT_DRIVE_FOLDER_ID ใน Script Properties!
-    const FOLDER_ID = PROPERTIES.getProperty('OIL_REPORT_DRIVE_FOLDER_ID') || 'root'; 
+        if (statusCode !== 200) {
+          Logger.log(`❌ Failed to get media content: ${statusCode} - ${response.getContentText()}`);
+          // Throw error เพื่อให้ retry function ทำงานซ้ำ
+          throw new Error(`LINE Media API error: ${statusCode}`);
+        }
 
-    // 3. Save to Google Drive
-    const folder = DriveApp.getFolderById(FOLDER_ID);
-    const file = folder.createFile(blob);
-    
-    // ตั้งค่าให้ไฟล์นี้สามารถดูได้ด้วยลิงก์ (เผื่อต้องการดูภายหลัง)
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        // 1. Get Blob
+        const blob = response.getBlob();
+        const fileName = `oil_report_bill_${messageId}_${new Date().getTime()}.jpg`;
+        blob.setName(fileName);
+        
+        // 2. Determine Folder ID
+        const FOLDER_ID = PROPERTIES.getProperty('OIL_REPORT_DRIVE_FOLDER_ID') || 'root'; 
 
-    Logger.log(`✅ Saved image to Drive: ${file.getUrl()}`);
-    return file.getUrl();
-    
+        // 3. Save to Google Drive
+        const folder = DriveApp.getFolderById(FOLDER_ID);
+        const file = folder.createFile(blob);
+        
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+        Logger.log(`✅ Saved image to Drive: ${file.getUrl()}`);
+        return file.getUrl();
+
+    }, 3, 2000); // Retry 3 ครั้ง, หน่วงเวลา 2 วินาที
+
   } catch (error) {
-    Logger.log(`❌ Error in getMediaContent: ${error.message}`);
+    Logger.log(`❌ Fatal Error in getMediaContent after retries: ${error.message}`);
     // ส่ง Error กลับไปเพื่อให้ Flow ใน EventHandler หยุดทำงาน
     throw error;
   }

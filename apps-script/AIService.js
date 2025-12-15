@@ -12,65 +12,73 @@
  * @param {string} message - ข้อความจากผู้ใช้
  * @return {string} คำตอบที่สร้างโดย AI หรือข้อความ Fallback
  */
+/**
+ * Query External AI (LLM)
+ * ใช้ LLM ภายนอก (เช่น Gemini, Claude, GPT) ในการตอบคำถาม
+ * @param {string} message - ข้อความจากผู้ใช้
+ * @return {string} คำตอบที่สร้างโดย AI หรือข้อความ Fallback
+ */
 function queryExternalAI(message) {
   try {
     Logger.log('🧠 Querying External AI for fallback...');
     
     // 1. ดึง API Key อย่างปลอดภัยจาก Script Properties
-    // สมมติว่าใช้ Gemini API Key
     const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
     
     if (!apiKey) {
       Logger.log('❌ GEMINI_API_KEY not set in Script Properties.');
-      return SYSTEM_CONFIG.MESSAGES.AI_FALLBACK; // ใช้ Fallback Message
+      return SYSTEM_CONFIG.MESSAGES.AI_FALLBACK;
     }
 
-    // 2. ตั้งค่าการเรียก API (ใช้ Gemini API เป็นตัวอย่าง)
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-    
-    // System instruction (กำหนดบทบาทของ AI)
-    const systemInstruction = "You are a helpful and polite chatbot for UNAGI YONDAIME KIKUKAWA. Answer the user's questions concisely in Thai. If you don't know the answer, politely state that you cannot answer.";
+    // 2. ใช้ retry ครอบ Logic การเรียก API ทั้งหมด
+    const generatedText = retry(() => {
+        Logger.log('🔄 Attempting call to Gemini API...');
+        
+        const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+        const systemInstruction = "You are a helpful and polite chatbot for UNAGI YONDAIME KIKUKAWA. Answer the user's questions concisely in Thai. If you don't know the answer, politely state that you cannot answer.";
 
-    const payload = {
-      // Configuration และ Contents
-      contents: [{ role: 'user', parts: [{ text: message }] }],
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.7,
-        maxOutputTokens: 2048,
-        // ... (อื่นๆ)
-      }
-    };
+        const payload = {
+          contents: [{ role: 'user', parts: [{ text: message }] }],
+          config: {
+            systemInstruction: systemInstruction,
+            temperature: 0.7,
+            maxOutputTokens: 2048,
+          }
+        };
 
-    const options = {
-      method: 'post',
-      contentType: 'application/json',
-      headers: {
-        'Authorization': `Bearer ${apiKey}` // หากใช้ Gemini API (ขึ้นอยู่กับวิธีการ Auth)
-        // หรือ 'x-api-key': apiKey (สำหรับบาง API)
-      },
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    };
+        const options = {
+          method: 'post',
+          contentType: 'application/json',
+          headers: {
+            // Note: การ Auth ด้วย Bearer token อาจจะต้องใช้ OAuth Token จาก GAS แทน API Key ตรงๆ
+            // แต่ถ้า API key เป็นแบบ 'x-api-key' ให้เปลี่ยน Header ตรงนี้
+            'x-api-key': apiKey // ใช้ Header สำหรับ API Key ทั่วไป
+          },
+          payload: JSON.stringify(payload),
+          muteHttpExceptions: true
+        };
 
-    const response = UrlFetchApp.fetch(url, options);
-    const result = JSON.parse(response.getContentText());
+        const response = UrlFetchApp.fetch(url, options);
+        const result = JSON.parse(response.getContentText());
+        
+        const candidates = result.candidates;
+        if (candidates && candidates.length > 0) {
+          const text = candidates[0].content?.parts[0]?.text;
+          if (text) {
+            return text;
+          }
+        }
+        
+        // ถ้า API สำเร็จ แต่คำตอบว่างเปล่าหรือถูกบล็อก ให้โยน Error เพื่อให้ retry
+        throw new Error('AI response empty or blocked by service.');
 
-    // 3. ประมวลผลคำตอบ
-    const candidates = result.candidates;
-    if (candidates && candidates.length > 0) {
-      const generatedText = candidates[0].content?.parts[0]?.text;
-      if (generatedText) {
-        Logger.log('✅ AI Response generated.');
-        return generatedText;
-      }
-    }
+    }, 3, 3000); // Retry 3 ครั้ง, หน่วงเวลา 3 วินาที
 
-    Logger.log('⚠️ AI response empty or blocked.');
-    return SYSTEM_CONFIG.MESSAGES.AI_FALLBACK;
+    Logger.log('✅ AI Response generated.');
+    return generatedText;
 
   } catch (error) {
-    Logger.log(`❌ External AI API Error: ${error.message}`);
+    Logger.log(`❌ External AI API Error after retries: ${error.message}`);
     // ส่งข้อความ Fallback เพื่อไม่ให้ระบบหยุดทำงาน
     return SYSTEM_CONFIG.MESSAGES.AI_FALLBACK; 
   }

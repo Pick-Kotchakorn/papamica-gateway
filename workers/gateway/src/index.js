@@ -3,7 +3,7 @@
 import { validateSignature } from '@line/bot-sdk';
 
 // 📌 GAS Endpoint (Primary)
-const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwFkTziOqmAyk6SFbKr4d1horasTiseY4SL9HZKEpe4tgYt-RZEk1fUuiCxtEoS7A-p/exec';
+const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzSksjKBT_LoifYrKdtuBZ0b8q-gVThIJ2v7M286N98sYdegrMIMDQM8oudXeobrKQL/exec';
 
 // 📌 Webhook.site Endpoint (Debug/Monitor)
 const WEBHOOK_SITE_URL = 'https://webhook.site/581662c1-e473-45d4-bf27-b8322220f377';

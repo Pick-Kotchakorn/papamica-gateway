@@ -1,5 +1,5 @@
 // ========================================
-// 🤖 DIALOGFLOWSERVICE.GS - DIALOGFLOW INTEGRATION (V2.0 FINAL)
+// 🤖 DIALOGFLOWSERVICE.GS - DIALOGFLOW INTEGRATION (V2.1 - Added Retry)
 // ========================================
 // ไฟล์นี้จัดการการเชื่อมต่อกับ Dialogflow Agent
 
@@ -13,36 +13,45 @@ const DIALOGFLOW_LANGUAGE_CODE = 'th';
  */
 function queryDialogflow(message, sessionId) {
   try {
-    const accessToken = getDialogflowAccessToken();
-    const url = `https://dialogflow.googleapis.com/v2/projects/${DIALOGFLOW_PROJECT_ID}/agent/sessions/${sessionId}:detectIntent`;
+    // 1. ใช้ retry ครอบ Logic การเรียก API ทั้งหมด
+    const result = retry(() => {
+        Logger.log('🔄 Attempting Dialogflow detectIntent call...');
+        
+        const accessToken = getDialogflowAccessToken();
+        const url = `https://dialogflow.googleapis.com/v2/projects/${DIALOGFLOW_PROJECT_ID}/agent/sessions/${sessionId}:detectIntent`;
 
-    const payload = {
-      queryInput: {
-        text: {
-          text: message,
-          languageCode: DIALOGFLOW_LANGUAGE_CODE
+        const payload = {
+          queryInput: {
+            text: {
+              text: message,
+              languageCode: DIALOGFLOW_LANGUAGE_CODE
+            }
+          }
+        };
+
+        const options = {
+          method: 'post',
+          contentType: 'application/json',
+          headers: { 'Authorization': 'Bearer ' + accessToken },
+          payload: JSON.stringify(payload),
+          muteHttpExceptions: true
+        };
+
+        const response = UrlFetchApp.fetch(url, options);
+        const jsonResult = JSON.parse(response.getContentText());
+
+        if (jsonResult.error) {
+          Logger.log('❌ Dialogflow API temporary error received: ' + JSON.stringify(jsonResult.error));
+          // Throw error ที่นี่เพื่อกระตุ้นให้ retry function ทำงานซ้ำหากเกิด API error (เช่น 5xx)
+          throw new Error('Dialogflow API returned an error: ' + jsonResult.error.message);
         }
-      }
-    };
+        
+        return jsonResult;
 
-    const options = {
-      method: 'post',
-      contentType: 'application/json',
-      headers: { 'Authorization': 'Bearer ' + accessToken },
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    };
-
-    const response = UrlFetchApp.fetch(url, options);
-    const result = JSON.parse(response.getContentText());
-
-    if (result.error) {
-      Logger.log('❌ Dialogflow Error: ' + JSON.stringify(result.error));
-      throw new Error(result.error.message);
-    }
+    }, 3, 2000); // Retry 3 ครั้ง, หน่วงเวลา 2 วินาที
 
     const queryResult = result.queryResult;
-    Logger.log('🤖 Dialogflow Raw Response: ' + JSON.stringify(result));
+    Logger.log('🤖 Dialogflow Raw Response (Final): ' + JSON.stringify(result));
 
     return {
       intent: queryResult.intent ? queryResult.intent.displayName : 'Unknown',
@@ -54,13 +63,15 @@ function queryDialogflow(message, sessionId) {
       messages: parseDialogflowMessages(queryResult)
     };
   } catch (error) {
-    Logger.log('❌ Dialogflow API Error: ' + error);
+    // Catch error ที่นี่คือ error หลังจากที่ retry ครบจำนวนครั้งแล้ว
+    Logger.log('❌ Dialogflow API Error after retries: ' + error);
     return null;
   }
 }
 
 /**
  * Parse Dialogflow Messages (รวม Logic การแปลง Payload จากโค้ดเดิม)
+ * (โค้ดส่วนนี้ยังคงเดิม)
  */
 function parseDialogflowMessages(queryResult) {
   const messages = [];
@@ -143,6 +154,7 @@ function parseDialogflowMessages(queryResult) {
 
 /**
  * Get Dialogflow Access Token (โค้ดสำหรับ Auth)
+ * (โค้ดส่วนนี้ยังคงเดิม)
  */
 function getDialogflowAccessToken() {
   const serviceAccount = JSON.parse(PropertiesService.getScriptProperties().getProperty('DIALOGFLOW_SERVICE_ACCOUNT'));

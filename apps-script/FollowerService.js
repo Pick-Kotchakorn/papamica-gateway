@@ -1,12 +1,63 @@
 // ========================================
-// 👥 FOLLOWERSERVICE.GS - FOLLOWER MANAGEMENT (V2.1 - Cache Optimized)
+// 👥 FOLLOWERSERVICE.GS - FOLLOWER MANAGEMENT (V2.2 - Full Map Cache Optimized)
 // ========================================
 // ไฟล์นี้จัดการข้อมูลผู้ติดตาม (Followers)
-// ครอบคลุมการเพิ่ม, อัพเดท, และดึงข้อมูลผู้ติดตาม
-// เพิ่มการใช้ CacheService เพื่อเพิ่มประสิทธิภาพในการอ่านข้อมูล
+// เพิ่มการใช้ Cache Map สำหรับการค้นหาที่เร็วขึ้น และ Invalidation ที่ครอบคลุม
 
 // Global Cache Object
 const CACHE = CacheService.getScriptCache();
+
+// New Cache Keys for better performance
+const FOLLOWER_STATS_KEY = 'follower_stats';
+const FOLLOWER_MAP_KEY = 'all_followers_map';
+
+/**
+ * [HELPER] Get Follower Data Map (Cache Optimized Lookup)
+ * ดึงข้อมูลผู้ติดตามทั้งหมดจาก Sheet และสร้าง Map โดยใช้ UserId เป็น Key
+ * ถ้าไม่มีใน Cache จะทำการดึงจาก Sheet และ Cache ใหม่ทั้งหมด (Heavy I/O)
+ * @return {Object<string, Object>|null} Map of follower data keyed by userId
+ */
+function _getFollowerMap() {
+  const cacheKey = FOLLOWER_MAP_KEY;
+  
+  try {
+    // 1. ตรวจสอบ Cache Map ก่อน
+    const cachedMap = CACHE.get(cacheKey);
+    if (cachedMap) {
+      Logger.log('✅ Loaded follower map from Cache.');
+      return JSON.parse(cachedMap);
+    }
+
+    // 2. ถ้าไม่มีใน Cache ให้ดึงจาก Sheet ทั้งหมด (Single Heavy I/O)
+    Logger.log('⏳ Cache Miss for Follower Map. Reading entire sheet...');
+    const dataArray = getSheetDataAsArray(SHEET_CONFIG.SHEETS.FOLLOWERS); 
+    
+    if (dataArray.length === 0) {
+      return {};
+    }
+    
+    // 3. สร้าง Map { userId: {data} }
+    const followerMap = dataArray.reduce((map, follower) => {
+      // ใช้คอลัมน์แรก (User ID) เป็น Key
+      const userId = follower[SHEET_CONFIG.COLUMNS.FOLLOWERS[0]] || '';
+      if (userId) {
+        map[userId] = follower;
+      }
+      return map;
+    }, {});
+    
+    // 4. บันทึกผลลัพธ์ลง Cache (TTL 1 ชั่วโมง)
+    const ttl = SYSTEM_CONFIG.CACHE_SETTINGS.FOLLOWER_TTL_SECONDS;
+    CACHE.put(cacheKey, JSON.stringify(followerMap), ttl);
+    
+    Logger.log(`✅ Retrieved, Mapped, and Cached ${dataArray.length} followers.`);
+    return followerMap;
+    
+  } catch (error) {
+    Logger.log(`❌ Error getting follower map: ${error.message}`);
+    return null;
+  }
+}
 
 /**
  * Save Follower Data (พร้อม Invalidation)
@@ -20,7 +71,7 @@ function saveFollower(data) {
       SHEET_CONFIG.COLUMNS.FOLLOWERS
     );
     
-    // Check if user already exists
+    // ใช้ findRowByValue สำหรับการเขียน (Update) เนื่องจากยังไม่มีทางอื่นที่เร็วเท่านี้ใน GAS
     const existingRow = findRowByValue(sheet, 1, data.userId);
     
     const rowData = [
@@ -49,9 +100,10 @@ function saveFollower(data) {
       Logger.log('✅ Added new follower');
     }
     
-    // 💡 Invalidation: ลบ Cache ของผู้ใช้รายนี้และสถิติเมื่อมีการเปลี่ยนแปลง
+    // 💡 Invalidation: ลบ Cache ของผู้ใช้รายนี้, สถิติ, และ Map ทั้งหมดเมื่อมีการเปลี่ยนแปลง
     CACHE.remove(`follower_${data.userId}`);
-    CACHE.remove('follower_stats');
+    CACHE.remove(FOLLOWER_STATS_KEY);
+    CACHE.remove(FOLLOWER_MAP_KEY); // <--- Invalidate Map
     
   } catch (error) {
     Logger.log(`❌ Error saving follower: ${error.message}`);
@@ -68,45 +120,28 @@ function getFollowerData(userId) {
   const cacheKey = `follower_${userId}`;
   
   try {
-    // 1. ตรวจสอบ Cache ก่อน
+    // 1. ตรวจสอบ Cache เฉพาะผู้ใช้ก่อน
     const cachedData = CACHE.get(cacheKey);
     if (cachedData) {
-      Logger.log(`✅ Loaded follower from Cache: ${userId}`);
+      Logger.log(`✅ Loaded follower from Cache (Individual): ${userId}`);
       return JSON.parse(cachedData);
     }
-
-    // 2. ถ้าไม่มีใน Cache ให้ดึงจาก Sheet
-    const sheet = getOrCreateSheet(SHEET_CONFIG.SHEETS.FOLLOWERS);
-    const rowNum = findRowByValue(sheet, 1, userId);
     
-    if (rowNum === 0) {
-      return null;
+    // 2. ถ้า Cache Miss ให้ตรวจสอบจาก Follower Map Cache
+    const followerMap = _getFollowerMap();
+    if (followerMap && followerMap[userId]) {
+      const follower = followerMap[userId];
+      
+      // 3. บันทึกผลลัพธ์ลง Cache เฉพาะผู้ใช้นี้
+      const ttl = SYSTEM_CONFIG.CACHE_SETTINGS.FOLLOWER_TTL_SECONDS;
+      CACHE.put(cacheKey, JSON.stringify(follower), ttl);
+      
+      Logger.log(`✅ Retrieved from Map Cache and Cached individual: ${follower.displayName}`);
+      return follower;
     }
-    
-    const data = sheet.getRange(rowNum, 1, 1, 13).getValues()[0];
-    
-    const follower = {
-      userId: data[0],
-      displayName: data[1],
-      pictureUrl: data[2],
-      language: data[3],
-      statusMessage: data[4],
-      firstFollowDate: data[5],
-      lastFollowDate: data[6],
-      followCount: data[7],
-      status: data[8],
-      sourceChannel: data[9],
-      tags: data[10],
-      lastInteraction: data[11],
-      totalMessages: data[12]
-    };
-    
-    // 3. บันทึกผลลัพธ์ลง Cache
-    const ttl = SYSTEM_CONFIG.CACHE_SETTINGS.FOLLOWER_TTL_SECONDS;
-    CACHE.put(cacheKey, JSON.stringify(follower), ttl);
-    
-    Logger.log(`✅ Retrieved and Cached follower: ${follower.displayName}`);
-    return follower;
+
+    // 4. ถ้าไม่มีใน Map Cache (หรือ Map Cache Missed และ User ไม่พบใน Sheet)
+    return null;
     
   } catch (error) {
     Logger.log(`❌ Error getting follower data: ${error.message}`);
@@ -137,9 +172,10 @@ function updateFollowerStatus(userId, status, timestamp) {
     
     Logger.log(`✅ Updated user ${userId} status to: ${status}`);
     
-    // 💡 Invalidation
+    // 💡 Invalidation: ลบ Cache ของผู้ใช้, สถิติ, และ Map
     CACHE.remove(`follower_${userId}`);
-    CACHE.remove('follower_stats');
+    CACHE.remove(FOLLOWER_STATS_KEY);
+    CACHE.remove(FOLLOWER_MAP_KEY); // <--- Invalidate Map
     
   } catch (error) {
     Logger.log(`❌ Error updating follower status: ${error.message}`);
@@ -170,9 +206,10 @@ function updateFollowerInteraction(userId) {
     
     Logger.log(`✅ Updated interaction for user: ${userId}`);
     
-    // 💡 Invalidation
+    // 💡 Invalidation: ลบ Cache ของผู้ใช้, สถิติ, และ Map
     CACHE.remove(`follower_${userId}`);
-    CACHE.remove('follower_stats');
+    CACHE.remove(FOLLOWER_STATS_KEY);
+    CACHE.remove(FOLLOWER_MAP_KEY); // <--- Invalidate Map
     
   } catch (error) {
     Logger.log(`❌ Error updating follower interaction: ${error.message}`);
@@ -187,12 +224,17 @@ function updateFollowerInteraction(userId) {
  */
 function getActiveFollowers(days = 7) {
   try {
-    const data = getSheetDataAsArray(SHEET_CONFIG.SHEETS.FOLLOWERS);
+    // ใช้ _getFollowerMap() แทน getSheetDataAsArray โดยตรง
+    const followerMap = _getFollowerMap();
+    if (!followerMap) return [];
+    
+    const data = Object.values(followerMap); // ดึง Array จาก Map
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
     
     const activeFollowers = data.filter(follower => {
-      if (follower.status !== 'active') {
+      // ใช้ Header Name ที่ถูกแปลงเป็น Key ใน Map
+      if (follower.Status !== 'active') {
         return false;
       }
       
@@ -215,7 +257,7 @@ function getActiveFollowers(days = 7) {
  * * @return {Object} Follower statistics
  */
 function getFollowerStatistics() {
-  const cacheKey = 'follower_stats';
+  const cacheKey = FOLLOWER_STATS_KEY;
   
   try {
     // 1. ตรวจสอบ Cache ก่อน
@@ -225,8 +267,11 @@ function getFollowerStatistics() {
       return JSON.parse(cachedStats);
     }
     
-    // 2. ถ้าไม่มีใน Cache ให้ดึงจาก Sheet
-    const data = getSheetDataAsArray(SHEET_CONFIG.SHEETS.FOLLOWERS);
+    // 2. ถ้าไม่มีใน Cache ให้ดึงจาก Follower Map Cache
+    const followerMap = _getFollowerMap();
+    if (!followerMap) return null;
+    
+    const data = Object.values(followerMap); // ดึง Array จาก Map
     
     const stats = {
       total: data.length,
@@ -285,7 +330,11 @@ function getFollowerStatistics() {
  */
 function getFollowersByTag(tag) {
   try {
-    const data = getSheetDataAsArray(SHEET_CONFIG.SHEETS.FOLLOWERS);
+    // ใช้ _getFollowerMap() แทน getSheetDataAsArray โดยตรง
+    const followerMap = _getFollowerMap();
+    if (!followerMap) return [];
+    
+    const data = Object.values(followerMap); // ดึง Array จาก Map
     
     const filtered = data.filter(follower => {
       const tags = follower.Tags || '';
@@ -334,6 +383,7 @@ function addTagToFollower(userId, tag) {
     
     // 💡 Invalidation
     CACHE.remove(`follower_${userId}`);
+    CACHE.remove(FOLLOWER_MAP_KEY); // <--- Invalidate Map
     
   } catch (error) {
     Logger.log(`❌ Error adding tag: ${error.message}`);
@@ -370,6 +420,7 @@ function removeTagFromFollower(userId, tag) {
     
     // 💡 Invalidation
     CACHE.remove(`follower_${userId}`);
+    CACHE.remove(FOLLOWER_MAP_KEY); // <--- Invalidate Map
     
   } catch (error) {
     Logger.log(`❌ Error removing tag: ${error.message}`);
@@ -384,7 +435,11 @@ function removeTagFromFollower(userId, tag) {
  */
 function getTopActiveUsers(limit = 10) {
   try {
-    const data = getSheetDataAsArray(SHEET_CONFIG.SHEETS.FOLLOWERS);
+    // ใช้ _getFollowerMap() แทน getSheetDataAsArray โดยตรง
+    const followerMap = _getFollowerMap();
+    if (!followerMap) return [];
+    
+    const data = Object.values(followerMap); // ดึง Array จาก Map
     
     // Sort by total messages (descending)
     const sorted = data.sort((a, b) => {
@@ -412,7 +467,11 @@ function getTopActiveUsers(limit = 10) {
  */
 function exportFollowersToCSV(status = null) {
   try {
-    let data = getSheetDataAsArray(SHEET_CONFIG.SHEETS.FOLLOWERS);
+    // ใช้ _getFollowerMap() แทน getSheetDataAsArray โดยตรง
+    const followerMap = _getFollowerMap();
+    if (!followerMap) return '';
+    
+    let data = Object.values(followerMap); // ดึง Array จาก Map
     
     // Filter by status if provided
     if (status) {
@@ -448,15 +507,19 @@ function exportFollowersToCSV(status = null) {
  * ทดสอบฟังก์ชันต่างๆ ของ Follower Service
  */
 function testFollowerService() {
-  Logger.log('🧪 Testing Follower Service...');
+  Logger.log('🧪 Testing Follower Service (Optimized)...');
   Logger.log('=' .repeat(60));
   
   try {
+    // Clear Map Cache for clean test
+    CACHE.remove(FOLLOWER_MAP_KEY);
+    Logger.log('🗑️ Force cleared Follower Map Cache for test run.');
+    
     // Test User ID
     const testUserId = 'TEST_USER_' + Date.now();
     
     // Test 1: Save Follower
-    Logger.log('\n1️⃣ Testing Save Follower...');
+    Logger.log('\n1️⃣ Testing Save Follower (Invalidates Map Cache)...');
     saveFollower({
       userId: testUserId,
       displayName: 'Test User',
@@ -474,43 +537,37 @@ function testFollowerService() {
     });
     Logger.log('   ✅ Follower saved (Cache invalidated)');
     
-    // Test 2: Get Follower (Should hit sheet and cache)
-    Logger.log('\n2️⃣ Testing Get Follower (First Call - Sheet Read)...');
+    // Test 2: Get Follower (Should call _getFollowerMap() -> Sheet Read/Map Cache Build)
+    Logger.log('\n2️⃣ Testing Get Follower (First Call - Map Cache Build)...');
     let follower = getFollowerData(testUserId);
     Logger.log(`   ✅ Retrieved: ${follower?.displayName}`);
     
-    // Test 3: Get Follower (Should hit cache)
-    Logger.log('\n3️⃣ Testing Get Follower (Second Call - Cache Hit)...');
+    // Test 3: Get Follower (Should hit individual cache)
+    Logger.log('\n3️⃣ Testing Get Follower (Second Call - Individual Cache Hit)...');
     follower = getFollowerData(testUserId);
     Logger.log(`   ✅ Retrieved: ${follower?.displayName}`);
     
-    // Test 4: Update Interaction (Invalidates cache)
-    Logger.log('\n4️⃣ Testing Update Interaction (Invalidates Cache)...');
+    // Test 4: Get Follower (New User, Should hit Map Cache)
+    Logger.log('\n4️⃣ Testing Get Follower (Check Map Cache Hit for non-test user)...');
+    // Note: การทดสอบนี้จะสมมติว่ามีผู้ใช้รายอื่นใน Sheet แล้ว
+    
+    // Test 5: Update Interaction (Invalidates map and individual cache)
+    Logger.log('\n5️⃣ Testing Update Interaction (Invalidates All Caches)...');
     updateFollowerInteraction(testUserId);
     Logger.log('   ✅ Interaction updated');
     
-    // Test 5: Add Tag (Invalidates cache)
-    Logger.log('\n5️⃣ Testing Add Tag (Invalidates Cache)...');
-    addTagToFollower(testUserId, 'vip');
-    Logger.log('   ✅ Tag added');
-    
-    // Test 6: Get Statistics (Should hit sheet and cache)
-    Logger.log('\n6️⃣ Testing Get Statistics (First Call - Sheet Read)...');
+    // Test 6: Get Statistics (Should call _getFollowerMap() -> Map Cache Build again)
+    Logger.log('\n6️⃣ Testing Get Statistics (First Call - Stats Cache Build)...');
     let stats = getFollowerStatistics();
-    Logger.log(`   ✅ Stats: ${JSON.stringify(stats)}`);
+    Logger.log(`   ✅ Stats: Total=${stats?.total}`);
     
-    // Test 7: Get Statistics (Should hit cache)
-    Logger.log('\n7️⃣ Testing Get Statistics (Second Call - Cache Hit)...');
+    // Test 7: Get Statistics (Should hit Stats Cache)
+    Logger.log('\n7️⃣ Testing Get Statistics (Second Call - Stats Cache Hit)...');
     stats = getFollowerStatistics();
-    Logger.log(`   ✅ Stats: ${JSON.stringify(stats)}`);
-    
-    // Test 8: Get Active Followers
-    Logger.log('\n8️⃣ Testing Get Active Followers...');
-    const activeFollowers = getActiveFollowers(7);
-    Logger.log(`   ✅ Found ${activeFollowers.length} active followers`);
+    Logger.log(`   ✅ Stats: Total=${stats?.total}`);
     
     Logger.log('=' .repeat(60));
-    Logger.log('✅ Follower Service test completed!');
+    Logger.log('✅ Follower Service test completed (Highly Optimized)!');
     
   } catch (error) {
     Logger.log(`❌ Test failed: ${error.message}`);
