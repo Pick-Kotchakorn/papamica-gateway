@@ -100,37 +100,5 @@ function routeEvent(event) {
   }
 }
 
-/**
- * Create JSON response for LINE
- */
-function createJsonResponse(data) {
-  return ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-function test_Backend_Process() {
-  // จำลองข้อมูลที่จะส่งมาจากหน้าเว็บ
-  const testUserId = "U1234567890abcdef1234567890abcdef"; // (ใส่ User ID ของคุณถ้ามี หรือใช้ค่านี้เทสก็ได้)
-  const testBranch = "KSQ";
-  const testAmount = 500;
-  // รูปภาพจำลอง (จุดสีขาว 1px)
-  const testImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-  const testMimeType = "image/png";
-  const testFileName = "test_debug.png";
-
-  Logger.log("🚀 เริ่มต้นการทดสอบ Backend...");
-
-  try {
-    // เรียกใช้ฟังก์ชันหลักเหมือนที่หน้าเว็บเรียก
-    const result = processWebReport(testUserId, testBranch, testAmount, testImageBase64, testMimeType, testFileName);
-    
-    Logger.log("✅ ทดสอบสำเร็จ! ผลลัพธ์ที่ได้:");
-    Logger.log(JSON.stringify(result));
-    
-  } catch (e) {
-    Logger.log("❌ เกิดข้อผิดพลาดร้ายแรง:");
-    Logger.log(e.toString());
-  }
-}
 // NOTE: ฟังก์ชัน initializeSystem(), healthCheck(), และฟังก์ชันทดสอบอื่น ๆ 
 // ควรอยู่ใน Main.gs ต้นฉบับ และควรคงไว้เพื่อการทดสอบ
