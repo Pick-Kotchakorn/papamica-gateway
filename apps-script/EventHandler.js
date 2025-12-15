@@ -1,11 +1,12 @@
 // ========================================
-// 📨 EVENTHANDLER.GS - EVENT PROCESSING (V2.0 FINAL)
+// 📨 EVENTHANDLER.GS - EVENT PROCESSING (V2.2 - Single-Step Report Flow)
 // ========================================
 // ไฟล์นี้จัดการ Events ต่างๆ จาก LINE
 // Note: ต้องพึ่งพา LineAPI.gs, SheetService.gs, FollowerService.gs, DialogflowService.gs
+// 💡 NEW DEPENDENCIES: ReportStateService.gs, OilReportService.gs, Utils.js
 
 // ========================================
-// 1. Message Router (ใช้ใน Main.gs)
+// 1. Message Router (ใช้ใน Main.js)
 // ========================================
 
 /**
@@ -24,27 +25,28 @@ function handleMessageEvent(event) {
         break;
         
       case 'image':
-        handleImageMessage(event);
+        // 💡 NEW LOGIC: ภาพที่ไม่ได้อยู่ใน Flow จะถูกละเว้น/บันทึก Log ธรรมดา
+        handleMediaMessage(event, 'Image', 'media.image', 'Image received');
         break;
         
       case 'video':
-        handleVideoMessage(event);
+        handleMediaMessage(event, 'Video', 'media.video', 'Video received');
         break;
         
       case 'audio':
-        handleAudioMessage(event);
+        handleMediaMessage(event, 'Audio', 'media.audio', 'Audio received');
         break;
         
       case 'file':
-        handleFileMessage(event);
+        handleMediaMessage(event, 'File', 'media.file', 'File received');
         break;
         
       case 'location':
-        handleLocationMessage(event);
+        handleMediaMessage(event, 'Location', 'media.location', 'Location received');
         break;
         
       case 'sticker':
-        handleStickerMessage(event);
+        handleMediaMessage(event, 'Sticker', 'media.sticker', 'Sticker received');
         break;
         
       default:
@@ -64,7 +66,7 @@ function handleMessageEvent(event) {
 // ========================================
 
 /**
- * Handle Text Message (Logic หลัก Dialogflow/Maintenance)
+ * Handle Text Message (Logic หลัก Dialogflow/Maintenance และ Single-step Link Reply)
  */
 function handleTextMessage(event) {
   const userId = event.source?.userId;
@@ -77,6 +79,54 @@ function handleTextMessage(event) {
     let aiResponseText = '';
     let intentName = 'N/A';
     
+    // ====================================================
+    // 💡 NEW LOGIC START: Single-step Web Form Trigger
+    // (ดักจับข้อความจาก Quick Reply: EmQuartier, KingsQuare, One Bangkok)
+    // ====================================================
+    const branchMap = {
+        'kingsquare': 'KSQ',
+        'emquartier': 'EMQ',
+        'one bangkok': 'ONB'
+    };
+
+    const userMessageLower = userMessage.toLowerCase();
+    const selectedBranchCode = branchMap[userMessageLower];
+
+    if (selectedBranchCode) {
+        
+        // 1. สร้าง URL ของ Web Form
+        const LIFF_URL = SYSTEM_CONFIG.URLS.OIL_REPORT_FORM; 
+        
+        // ส่ง userId และ branchCode ผ่าน parameter
+        const formUrl = LIFF_URL + 
+                        `?branch=${selectedBranchCode}` +
+                        `&userId=${userId}`;
+
+        const formText = `✅ สาขา ${userMessage} ได้รับการเลือก\n\nกรุณาคลิกลิงก์ด้านล่างเพื่อกรอกยอดขายและแนบรูปบิลในฟอร์มเดียว:\n\n🔗 ${formUrl}`;
+
+        pushSimpleMessage(userId, formText);
+        
+        // 2. Log the event
+        saveConversation({ 
+          userId: userId,
+          userMessage: userMessage, 
+          aiResponse: formText, 
+          intent: 'oil_report.form_link_sent',
+          timestamp: new Date()
+        });
+        
+        updateFollowerInteraction(userId);
+        
+        return; // 🛑 หยุดการทำงานที่นี่ ไม่ต้องไป Dialogflow/Fallback
+    }
+    // ====================================================
+    // 💡 NEW LOGIC END
+    // ====================================================
+        
+    // ----------------------------------------------------
+    // LOGIC เดิม: Dialogflow / Hybrid AI
+    // ----------------------------------------------------
+    
     // ตรวจสอบสถานะ DIALOGFLOW_ENABLED (จาก SYSTEM_CONFIG.FEATURES)
     if (SYSTEM_CONFIG.FEATURES.DIALOGFLOW_ENABLED) {
       // 🟢 เปิดใช้งาน Dialogflow / Hybrid AI
@@ -84,37 +134,40 @@ function handleTextMessage(event) {
 
       if (dialogflowResponse && dialogflowResponse.messages) {
           
-          // 🧠 HYBRID AI LOGIC START
-          const confidence = dialogflowResponse.confidence || 0;
+          // 💡 NEW LOGIC: ดักจับ Template Trigger (เช่น booking.table)
+          const fulfillmentText = dialogflowResponse.fulfillmentText?.trim() || '';
           
-          // ⚠️ Note: DIALOGFLOW_CONFIDENCE_THRESHOLD ต้องถูกตั้งค่าใน Config.gs (เช่น 0.65)
-          const CONFIDENCE_THRESHOLD = SYSTEM_CONFIG.DEFAULTS.DIALOGFLOW_CONFIDENCE_THRESHOLD || 0.65; 
-          
-          if (confidence < CONFIDENCE_THRESHOLD) {
-              // ➡️ Confidence ต่ำ: ใช้ External AI เป็น Fallback
-              Logger.log(`🧠 Dialogflow confidence (${confidence}) is low. Calling External AI.`);
+          if (fulfillmentText === 'TRIGGER_BOOKING_TEMPLATE') {
+              Logger.log('📞 Intent Matched: Booking Template Triggered!');
               
-              aiResponseText = queryExternalAI(userMessage); // ⬅️ เรียก AIService.gs
+              const bookingMessages = getBookingTemplate(); 
+              sendLineMessages(userId, { messages: bookingMessages });
               
-              // ส่งคำตอบที่ได้จาก External AI (LLM) กลับไป
-              sendLineMessages(userId, { messages: [{ type: 'text', text: aiResponseText }] });
-              
-              intentName = 'ai.external.fallback';
-              
+              aiResponseText = formatResponseForSheet(bookingMessages);
+              intentName = 'booking.table';
+
           } else {
-              // ➡️ Confidence สูง: ใช้ Dialogflow ตอบกลับ
-              Logger.log(`🤖 Dialogflow confidence (${confidence}) is high. Using Fulfillment.`);
+              // 🧠 HYBRID AI LOGIC START (Logic เดิม)
+              const confidence = dialogflowResponse.confidence || 0;
+              const CONFIDENCE_THRESHOLD = SYSTEM_CONFIG.DEFAULTS.DIALOGFLOW_CONFIDENCE_THRESHOLD || 0.65; 
               
-              sendLineMessages(userId, dialogflowResponse);
-              aiResponseText = formatResponseForSheet(dialogflowResponse.messages);
-              intentName = dialogflowResponse.intent;
+              if (confidence < CONFIDENCE_THRESHOLD) {
+                  Logger.log(`🧠 Dialogflow confidence (${confidence}) is low. Calling External AI.`);
+                  aiResponseText = queryExternalAI(userMessage); 
+                  sendLineMessages(userId, { messages: [{ type: 'text', text: aiResponseText }] });
+                  intentName = 'ai.external.fallback';
+              } else {
+                  Logger.log(`🤖 Dialogflow confidence (${confidence}) is high. Using Fulfillment.`);
+                  sendLineMessages(userId, dialogflowResponse);
+                  aiResponseText = formatResponseForSheet(dialogflowResponse.messages);
+                  intentName = dialogflowResponse.intent;
+              }
+              // 🧠 HYBRID AI LOGIC END
           }
-          // 🧠 HYBRID AI LOGIC END
           
     } else {
-        // Dialogflow ล้มเหลวในการเชื่อมต่อหรือตอบกลับ
-        // ⚠️ NEW LOGIC: ใช้ External AI เป็น Fallback/Error Handler
-        aiResponseText = queryExternalAI(userMessage); // ⬅️ ลองเรียก AI แทน Error
+        // Dialogflow ล้มเหลว - ใช้ External AI Fallback
+        aiResponseText = queryExternalAI(userMessage); 
         sendLineMessages(userId, { messages: [{ type: 'text', text: aiResponseText }] });
         intentName = 'ai.external.fallback';
     }
@@ -135,7 +188,7 @@ function handleTextMessage(event) {
     }
     
     // ✅ อัปเดตสถิติผู้ติดตาม (ต้องรันเสมอ)
-    updateFollowerInteraction(userId); // จาก FollowerService.gs
+    updateFollowerInteraction(userId); 
 
     // ✅ บันทึกข้อมูลลง Sheet
     saveConversation({ 
@@ -154,6 +207,7 @@ function handleTextMessage(event) {
 
 /**
  * Handle Postback Event (Logic หลัก Dialogflow/Maintenance)
+ * ⚠️ Note: Flow Oil Report เดิม (ที่ใช้ Postback) ถูกนำออกแล้ว
  */
 function handlePostbackEvent(event) {
   const userId = event.source?.userId;
@@ -164,6 +218,13 @@ function handlePostbackEvent(event) {
   try {
     sendLoadingAnimation(userId);
     
+    // ----------------------------------------------------
+    // 💡 NEW LOGIC: ไม่ต้องจัดการ Oil Report Postback แล้ว
+    // ----------------------------------------------------
+
+    // ----------------------------------------------------
+    // LOGIC เดิม: Dialogflow / Maintenance Mode
+    // ----------------------------------------------------
     if (SYSTEM_CONFIG.FEATURES.DIALOGFLOW_ENABLED) {
         const dialogflowResponse = queryDialogflow(postbackData, userId);
 
@@ -200,15 +261,13 @@ function handlePostbackEvent(event) {
   }
 }
 
-
-// ========================================
-// 3. Follower Management Handlers - FINAL (รวม Logic)
-// ========================================
+// ... (ส่วนที่เหลือของฟังก์ชัน Follower Management, Media Handling และ Helper Functions)
 
 /**
  * Handle Follow Event (เพิ่มเพื่อน)
  */
 function handleFollowEvent(event) {
+  // ... (โค้ดเดิม)
   try {
     const userId = event.source?.userId;
     const timestamp = new Date(event.timestamp);
@@ -260,6 +319,7 @@ function handleFollowEvent(event) {
  * Handle Unfollow Event (บล็อก/ลบเพื่อน)
  */
 function handleUnfollowEvent(event) {
+  // ... (โค้ดเดิม)
   try {
     const userId = event.source?.userId;
     const timestamp = new Date(event.timestamp);
@@ -283,9 +343,9 @@ function handleUnfollowEvent(event) {
 
 /**
  * Handle Media Message (Image, Video, Audio, File, Location, Sticker)
- * Note: ลบ pushSimpleMessage() และให้ Dialogflow/WebHook จัดการคำตอบ
  */
 function handleMediaMessage(event, mediaType, intentPrefix, aiResponseText) {
+  // ... (โค้ดเดิม)
   const userId = event.source?.userId;
   Logger.log(`🖼️ ${mediaType} message received`);
   if (userId) {
@@ -306,20 +366,8 @@ function handleMediaMessage(event, mediaType, intentPrefix, aiResponseText) {
     updateFollowerInteraction(userId);
     
     // 4. (Optional) Query Dialogflow ด้วย Text Fallback สำหรับ Media
-    // ถ้าต้องการให้ Dialogflow ตอบกลับโดยอัตโนมัติ ให้เพิ่ม Logic นี้:
-    // 
-    // if (SYSTEM_CONFIG.FEATURES.DIALOGFLOW_ENABLED) {
-    //     // ส่ง Text Query ไปที่ Dialogflow (เช่น "[MEDIA_IMAGE]")
-    //     const dialogflowResponse = queryDialogflow(`[${intentPrefix}]`, userId);
-    //     if (dialogflowResponse && dialogflowResponse.messages) {
-    //         sendLineMessages(userId, dialogflowResponse);
-    //     }
-    // }
+    // ...
   }
-}
-
-function handleImageMessage(event) {
-  handleMediaMessage(event, 'Image', 'media.image', 'Image received');
 }
 
 function handleVideoMessage(event) {

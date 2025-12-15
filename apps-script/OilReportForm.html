@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>รายงานยอดขายน้ำมันเก่า</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 15px; background-color: #f4f4f9; color: #333; }
+    .container { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    h1 { color: #00b900; text-align: center; font-size: 20px; margin-bottom: 20px; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; }
+    input[type="number"], input[type="file"], select { width: 100%; padding: 10px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    button { background-color: #00b900; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
+    .status { margin-top: 15px; padding: 10px; border-radius: 4px; text-align: center; }
+    .error { background-color: #fdd; color: #d00; border: 1px solid #f00; }
+    .success { background-color: #dfd; color: #0a0; border: 1px solid #0f0; }
+    .branch-info { background-color: #e6f7ff; padding: 10px; border-radius: 4px; margin-bottom: 20px; text-align: center; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>รายงานยอดขายน้ำมันเก่า</h1>
+    <div id="branch-display" class="branch-info"></div>
+    
+    <form id="reportForm">
+      <input type="hidden" id="userId" name="userId" value="<?= userId ?>">
+      <input type="hidden" id="branch" name="branch" value="<?= branch ?>">
+
+      <label for="amount">ยอดขายน้ำมันเก่า (บาท)</label>
+      <input type="number" id="amount" name="amount" required placeholder="เช่น 350.50">
+      
+      <label for="image">อัปโหลดรูปบิล (PNG/JPG)</label>
+      <input type="file" id="image" name="image" accept="image/png, image/jpeg" required>
+
+      <button type="submit" id="submitBtn">บันทึกรายงาน</button>
+      
+      <div id="statusMessage" class="status" style="display:none;"></div>
+    </form>
+  </div>
+  
+  <script>
+    // 💡 JavaScript Logic for form submission
+    
+    // 💡 REMOVED: ไม่ต้องใช้ getQueryParam แล้ว เพราะค่าอยู่ใน input[type="hidden"]
+
+    const userIdInput = document.getElementById('userId');
+    const branchInput = document.getElementById('branch');
+    const branchDisplay = document.getElementById('branch-display');
+    const submitBtn = document.getElementById('submitBtn');
+    const form = document.getElementById('reportForm');
+    const statusMessage = document.getElementById('statusMessage');
+
+    // 1. Initialize form fields from Hidden Input values
+    // 💡 FIX: ดึงค่าจาก input ที่ถูก set ด้วย Scriptlet
+    const hiddenUserId = userIdInput.value;
+    const hiddenBranch = branchInput.value;
+
+    // ตรวจสอบว่าค่าถูกส่งมาจาก GAS Backend หรือไม่
+    if (hiddenUserId && hiddenBranch) {
+      branchDisplay.textContent = `สาขาที่รายงาน: ${hiddenBranch}`;
+      submitBtn.disabled = false;
+    } else {
+      branchDisplay.textContent = '❌ ข้อมูลสาขาไม่ครบถ้วน กรุณาเริ่มจาก LINE Bot ใหม่';
+      submitBtn.disabled = true;
+    }
+
+    // 2. Handle form submission
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      statusMessage.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'กำลังบันทึก...';
+
+      const file = document.getElementById('image').files[0];
+      if (!file) {
+        showMessage('❌ กรุณาแนบรูปบิล', 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'บันทึกรายงาน';
+        return;
+      }
+      
+      // Construct form data object
+      const formData = new FormData(form);
+
+      // 💡 Call Google Apps Script backend function
+      google.script.run
+        .withSuccessHandler(onSuccess)
+        .withFailureHandler(onFailure)
+        .processWebReport(formData); 
+    });
+    
+    function showMessage(msg, type) {
+        statusMessage.textContent = msg;
+        statusMessage.className = `status ${type}`;
+        statusMessage.style.display = 'block';
+    }
+
+    // 3. Handle successful response from GAS
+    function onSuccess(summary) {
+      submitBtn.textContent = 'บันทึกสำเร็จ!';
+      
+      let msg = `✅ บันทึกรายงานยอดขายสำเร็จ\n`;
+      msg += `สาขา: ${summary.branch}\n`;
+      msg += `ยอดล่าสุด: ${formatCurrency(summary.latest)}\n`;
+      msg += `ยอดสะสมเดือนนี้: ${formatCurrency(summary.accumulated)}\n`;
+      msg += `ยอดคงเหลือ: ${formatCurrency(summary.remaining)} (จากเป้า ${formatCurrency(summary.goal)})`;
+
+      showMessage(msg, 'success');
+      form.reset(); // Clear form fields
+      // 💡 FIX: ต้อง set branch และ userId กลับเข้าไปใหม่หลัง reset
+      userIdInput.value = hiddenUserId;
+      branchInput.value = hiddenBranch;
+      
+      submitBtn.disabled = false;
+    }
+
+    // 4. Handle failed response from GAS
+    function onFailure(error) {
+      console.error(error);
+      submitBtn.textContent = 'บันทึกรายงาน';
+      showMessage(`❌ เกิดข้อผิดพลาดในการบันทึก: ${error.message || error}`, 'error');
+      submitBtn.disabled = false;
+    }
+    
+    function formatCurrency(amount) {
+        return amount.toLocaleString('th-TH', { 
+            style: 'currency', 
+            currency: 'THB',
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2 
+        });
+    }
+  </script>
+</body>
+</html>

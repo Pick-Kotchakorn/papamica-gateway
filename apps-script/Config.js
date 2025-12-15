@@ -1,5 +1,5 @@
 // ========================================
-// 🔧 CONFIG.JS - MAIN CONFIGURATION (V2.1 - Secure & Cache Ready)
+// 🔧 CONFIG.JS - MAIN CONFIGURATION (V2.2 - Web Form Ready)
 // ========================================
 // ไฟล์นี้เก็บการตั้งค่าทั้งหมดของระบบ
 // ดึงค่าสำคัญจาก Script Properties เพื่อความปลอดภัย
@@ -45,7 +45,9 @@ const SHEET_CONFIG = {
     BROADCAST_PERFORMANCE: 'Broadcast_Performance',
     SEGMENT_ANALYSIS: 'Segment_Analysis',
     RICH_MENU_STATS: 'RichMenu_Stats',
-    DASHBOARD: 'Dashboard'
+    DASHBOARD: 'Dashboard',
+    // 💡 NEW: เพิ่มชื่อ Sheet สำหรับ Oil Report
+    OIL_REPORTS: 'Oil_Reports' //
   },
   
   // Column Structures
@@ -71,7 +73,16 @@ const SHEET_CONFIG = {
       'Tags',
       'Last Interaction',
       'Total Messages'
-    ]
+    ],
+    // 💡 NEW: เพิ่ม Column Structure สำหรับ Oil Report
+    OIL_REPORTS: [
+        'timestamp',
+        'branch',
+        'amount',
+        'image_url',
+        'staff_user_id',
+        'month_key'
+    ] //
   }
 };
 
@@ -87,6 +98,12 @@ const SYSTEM_CONFIG = {
     FOLLOWER_TRACKING: true          
   },
   
+  // 💡 NEW: URLS สำหรับ Web App ต่างๆ
+  URLS: {
+    // Placeholder: URL นี้จะต้องถูกอัปเดตหลังจาก Deploy Web App (ขั้นตอน 3.3)
+    OIL_REPORT_FORM: 'https://script.google.com/macros/s/AKfycbxEgtnl4WFLSIqYsHRGxTKsn6JOkSnF6jMmpht3AHm_CuXtIoGwcRN6DvUOaQVpe7w/exec',
+  },
+
   // Cache Settings (ใช้ใน FollowerService.js)
   CACHE_SETTINGS: {
     FOLLOWER_TTL_SECONDS: 3600, // แคชข้อมูลผู้ติดตาม 1 ชั่วโมง
@@ -109,7 +126,9 @@ const SYSTEM_CONFIG = {
     FOLLOWER_TAGS: 'new-customer',
     UNKNOWN_DISPLAY_NAME: 'Unknown',
     UNKNOWN_LANGUAGE: 'unknown',
-    DIALOGFLOW_CONFIDENCE_THRESHOLD: 0.65
+    DIALOGFLOW_CONFIDENCE_THRESHOLD: 0.65,
+    // 💡 NEW: กำหนดเป้าหมายสำหรับ Oil Report (ตัวอย่าง 10,000 บาท)
+    OIL_REPORT_GOAL: 10000 //
   }
 };
 
@@ -202,6 +221,10 @@ function testConfiguration() {
     const status = SYSTEM_CONFIG.FEATURES[feature] ? '✅' : '❌';
     Logger.log(`  ${status} ${feature}: ${SYSTEM_CONFIG.FEATURES[feature]}`);
   });
+  
+  Logger.log('\n🛢️ Oil Report Configuration:');
+  Logger.log(`  Goal: ${SYSTEM_CONFIG.DEFAULTS.OIL_REPORT_GOAL}`);
+  Logger.log(`  Form URL: ${SYSTEM_CONFIG.URLS.OIL_REPORT_FORM}`);
   
   Logger.log('\n🔍 Running Validation:');
   validateConfig();

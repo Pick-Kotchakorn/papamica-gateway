@@ -1,7 +1,10 @@
 // ========================================
-// 📱 LINEAPI.GS - LINE API WRAPPER (V2.0 FINAL)
+// 📱 LINEAPI.GS - LINE API WRAPPER (V2.1 - Media Content Added)
 // ========================================
 // ไฟล์นี้จัดการการเชื่อมต่อกับ LINE API
+
+// 💡 Note: PROPERTIES ต้องถูกประกาศใน Config.js และโหลดก่อน LineAPI.gs
+// เพื่อให้ฟังก์ชัน getMediaContent สามารถดึง FOLDER_ID จาก Script Properties ได้
 
 /**
  * Send Loading Animation (จากโค้ดเดิม)
@@ -163,5 +166,58 @@ function getUserProfile(userId) {
   }
 }
 
-// NOTE: ฟังก์ชันอื่น ๆ เช่น replyMessage, pushMessages, validateMessage, filterValidMessages 
-// มีอยู่ใน LineAPI.gs ต้นฉบับที่คุณมีอยู่แล้ว (อ้างอิงจากไฟล์ที่ส่งมา) และสามารถคงไว้ได้
+// ========================================
+// 💡 NEW FUNCTION: Get Media Content (สำหรับ Oil Report)
+// ========================================
+
+/**
+ * Get Media Content (Image/Video/Audio) from LINE
+ * ดึงเนื้อหาสื่อ (เช่น รูปบิล) บันทึกใน Google Drive และส่งคืน URL
+ * @param {string} messageId - ID ของ message ที่ต้องการดึงเนื้อหา
+ * @return {string} URL ของรูปภาพที่ถูกบันทึกใน Google Drive
+ */
+function getMediaContent(messageId) {
+  // 💡 Note: ฟังก์ชันนี้ต้องเปิดใช้งาน Drive API ใน GAS Services
+  try {
+    const url = `https://api-data.line.me/v2/bot/message/${messageId}/content`;
+    const options = {
+      method: 'get',
+      headers: {
+        'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN,
+      },
+      muteHttpExceptions: true,
+    };
+
+    const response = UrlFetchApp.fetch(url, options);
+    const statusCode = response.getResponseCode();
+
+    if (statusCode !== 200) {
+      Logger.log(`❌ Failed to get media content: ${statusCode} - ${response.getContentText()}`);
+      throw new Error(`LINE Media API error: ${statusCode}`);
+    }
+
+    // 1. Get Blob
+    const blob = response.getBlob();
+    const fileName = `oil_report_bill_${messageId}_${new Date().getTime()}.jpg`;
+    blob.setName(fileName);
+    
+    // 2. Determine Folder ID
+    // ⚠️ ต้องเพิ่ม OIL_REPORT_DRIVE_FOLDER_ID ใน Script Properties!
+    const FOLDER_ID = PROPERTIES.getProperty('OIL_REPORT_DRIVE_FOLDER_ID') || 'root'; 
+
+    // 3. Save to Google Drive
+    const folder = DriveApp.getFolderById(FOLDER_ID);
+    const file = folder.createFile(blob);
+    
+    // ตั้งค่าให้ไฟล์นี้สามารถดูได้ด้วยลิงก์ (เผื่อต้องการดูภายหลัง)
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    Logger.log(`✅ Saved image to Drive: ${file.getUrl()}`);
+    return file.getUrl();
+    
+  } catch (error) {
+    Logger.log(`❌ Error in getMediaContent: ${error.message}`);
+    // ส่ง Error กลับไปเพื่อให้ Flow ใน EventHandler หยุดทำงาน
+    throw error;
+  }
+}
