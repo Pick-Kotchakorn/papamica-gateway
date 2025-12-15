@@ -1,6 +1,6 @@
 ﻿{
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "papamica-main-bot",
+  "name": "papamica-gateway",
   "main": "src/index.js",
   "compatibility_date": "2024-11-28",
   "compatibility_flags": ["nodejs_compat"],

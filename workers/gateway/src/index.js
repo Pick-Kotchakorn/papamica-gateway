@@ -4,7 +4,7 @@ import { validateSignature } from '@line/bot-sdk';
 
 // 📌 รายการ Webhook Endpoints ทั้งหมด
 // แก้ไข: ใช้ env.GAS_ENDPOINT แทนการ hardcode list
-const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxEgtnl4WFLSIqYsHRGxTKsn6JOkSnF6jMmpht3AHm_CuXtIoGwcRN6DvUOaQVpe7w/exec';
+const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwFkTziOqmAyk6SFbKr4d1horasTiseY4SL9HZKEpe4tgYt-RZEk1fUuiCxtEoS7A-p/exec';
 
 export default {
   async fetch(request, env, ctx) {
