@@ -81,6 +81,7 @@ const SHEET_CONFIG = {
         'timestamp',
         'branch',
         'amount',
+        'type',
         'image_url',
         'staff_user_id',
         'month_key'

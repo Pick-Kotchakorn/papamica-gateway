@@ -269,17 +269,17 @@ function handleOilReportFlow(event, state) {
   if (state.step === 'AWAITING_IMAGE') {
     if (msg.type === 'image') {
       try {
-        // บันทึกรูปและข้อมูล (Heavy I/O: LINE API Fetch + Drive Write + Sheet Write)
-        
-        const imageUrl = getMediaContent(msg.id); // <-- Line API Fetch + Drive Write (มี retry แล้ว)
+        // บันทึกรูปและข้อมูล
+        const imageUrl = getMediaContent(msg.id); 
         const finalData = {
           userId: userId,
           branch: state.data.branch,
           amount: state.data.amount,
-          imageUrl: imageUrl
+          imageUrl: imageUrl,
+          type: 'deposit' // 💡 NEW: ระบุประเภทธุรกรรมเป็น 'deposit'
         };
 
-        const summary = saveOilReport(finalData); // <-- Sheet Write
+        const summary = saveOilReport(finalData); // <-- ส่ง type ไปด้วย
 
         const replyText = `✅ บันทึกสำเร็จ!\n\n📍 สาขา: ${summary.branch}\n💰 ยอดครั้งนี้: ${formatNumber(summary.latest)} บ.\n📊 สะสมเดือนนี้: ${formatNumber(summary.accumulated)} บ.\n🎯 เป้าเดือนนี้: ${formatNumber(summary.goal)} บ.`;
         pushSimpleMessage(userId, replyText);

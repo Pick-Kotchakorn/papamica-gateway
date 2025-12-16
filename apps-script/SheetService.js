@@ -172,54 +172,64 @@ function updateRow(sheet, rowNumber, values) {
 }
 
 // ========================================
-// 🛢️ OIL REPORT FUNCTIONS (ADD TO SHEETSERVICE.GS)
+// 🛢️ OIL REPORT FUNCTIONS
 // ========================================
 
 /**
  * Save Oil Report and Calculate Summary
  * บันทึกรายงานน้ำมันเก่าและคำนวณยอดสรุป
- * @param {Object} data - { userId, branch, amount, imageUrl }
+ * @param {Object} data - { userId, branch, amount, imageUrl, type }
  * @return {Object} Summary data { branch, latest, accumulated, remaining, goal }
  */
 function saveOilReport(data) {
   try {
-    const sheetName = SHEET_CONFIG.SHEETS.OIL_REPORTS; // ต้องตรงกับ Config.js ('Oil_Reports')
-    // ตรวจสอบว่ามีชีตนี้หรือไม่ ถ้าไม่มีให้สร้าง
+    const sheetName = SHEET_CONFIG.SHEETS.OIL_REPORTS; 
     const sheet = getOrCreateSheet(sheetName, SHEET_CONFIG.COLUMNS.OIL_REPORTS);
     
     const timestamp = new Date();
-    const monthKey = Utilities.formatDate(timestamp, 'Asia/Bangkok', 'yyyy-MM'); // ใช้ Group by เดือน
+    const monthKey = Utilities.formatDate(timestamp, 'Asia/Bangkok', 'yyyy-MM'); 
     
     // 1. บันทึกข้อมูลลง Sheet
-    // Columns: [timestamp, branch, amount, image_url, staff_user_id, month_key]
+    // Columns: [timestamp, branch, amount, type, image_url, staff_user_id, month_key]
     sheet.appendRow([
       timestamp,
       data.branch,
       data.amount,
+      data.type || 'deposit', 
       data.imageUrl,
       data.userId,
       monthKey
     ]);
     
-    Logger.log(`💾 Oil Report saved for ${data.branch}: ${data.amount} THB`);
+    Logger.log(`💾 Oil Report saved for ${data.branch}: ${data.amount} THB (Type: ${data.type || 'deposit'})`);
 
     // 2. คำนวณยอดสรุป (Summary Calculation)
     const reportData = getSheetDataAsArray(sheetName);
     
     // กรองเฉพาะสาขาและเดือนปัจจุบัน
     const currentMonthData = reportData.filter(row => {
-      // แปลง Timestamp ใน Sheet กลับเป็น Date object เพื่อหาเดือน
-      // หรือใช้ month_key ที่เราเพิ่งสร้างก็ได้ (ถ้ามี column นี้)
-      // เพื่อความชัวร์ ใช้ key ที่เราสร้าง row ล่าสุด
-      return row['branch'] === data.branch && 
-             row['month_key'] === monthKey;
+      // 💡 FIX: ใช้ String() ครอบเพื่อเปรียบเทียบ String ต่อ String
+      const rowBranch = String(row['branch']);
+      const rowMonthKey = String(row['month_key']);
+
+      return rowBranch === String(data.branch) && 
+             rowMonthKey === monthKey;
     });
 
-    // ยอดรวมสะสมของสาขานี้ ในเดือนนี้
+    // 3. คำนวณยอดรวมสะสม (รวม Logic รับ/จ่าย)
     const totalAccumulated = currentMonthData.reduce((sum, row) => {
-      return sum + (parseFloat(row['amount']) || 0);
-    }, 0);
-
+      // 💡 FIX: ใช้ safeParseFloat ที่ถูกแก้ไขใหม่
+      const amount = safeParseFloat(row['amount']); 
+      const type = String(row['type'] || 'deposit'); 
+      
+      if (type === 'deposit') {
+        return sum + amount; // ธุรกรรม 'รับ' (ยอดขาย) ให้นำมาบวก
+      } else if (type === 'withdraw') {
+        return sum - amount; // ธุรกรรม 'จ่าย' (เบิก) ให้นำมาลบ
+      }
+      return sum;
+    }, 0); 
+    
     // เป้าหมาย (จาก Config)
     const goal = SYSTEM_CONFIG.DEFAULTS.OIL_REPORT_GOAL || 10000;
     const remaining = Math.max(0, goal - totalAccumulated);

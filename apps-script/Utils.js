@@ -151,16 +151,26 @@ function retry(func, maxRetries = 3, delay = 1000) {
 
 /**
  * Safe Parse Float
- * แปลงเป็น Float อย่างปลอดภัย
+ * แปลงเป็น Float อย่างปลอดภัย โดยรองรับการลบคอมม่า
  * * @param {*} value - Value to parse
  * @param {number} defaultValue - Default value (default: 0)
  * @return {number} Parsed number
  */
 function safeParseFloat(value, defaultValue = 0) {
   try {
-    const parsed = parseFloat(value);
+    // 1. แปลงค่าที่ได้รับมาเป็น String และจัดการค่าว่าง
+    let strValue = String(value || 0);
+
+    // 2. 💡 FIX: ลบคอมม่า (,) ออกจาก String และ Trim ช่องว่าง
+    strValue = strValue.replace(/,/g, '').trim(); 
+    
+    // 3. ทำการแปลงเป็น Float
+    const parsed = parseFloat(strValue);
+    
+    // 4. ส่งคืนค่า หรือค่าเริ่มต้นถ้าแปลงไม่ได้
     return isNaN(parsed) ? defaultValue : parsed;
   } catch (error) {
+    Logger.log(`⚠️ safeParseFloat Error: ${error.message} for value: ${value}`);
     return defaultValue;
   }
 }
