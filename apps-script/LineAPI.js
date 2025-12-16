@@ -1,13 +1,14 @@
 // ========================================
-// 📱 LINEAPI.GS - LINE API WRAPPER (V2.3 - MarkAsRead Added)
+// 📱 LINEAPI.GS - LINE API WRAPPER (V2.5 - Full Feature)
 // ========================================
-// ไฟล์นี้จัดการการเชื่อมต่อกับ LINE API
+// ไฟล์นี้จัดการการเชื่อมต่อกับ LINE API ทั้งหมด
+// รวมฟังก์ชัน: Reply/Push, MarkAsRead, Profile, Loading Animation, Media Content
 
 // 💡 Note: PROPERTIES ต้องถูกประกาศใน Config.js และโหลดก่อน LineAPI.gs
-// เพื่อให้ฟังก์ชัน getMediaContent สามารถดึง FOLDER_ID จาก Script Properties ได้
 
 /**
- * Send Loading Animation (จากโค้ดเดิม)
+ * 1. Send Loading Animation
+ * แสดง Animation ระหว่างรอประมวลผล
  */
 function sendLoadingAnimation(userId) {
   try {
@@ -19,9 +20,7 @@ function sendLoadingAnimation(userId) {
     const options = {
       method: 'post',
       contentType: 'application/json',
-      headers: {
-        'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN
-      },
+      headers: { 'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN },
       payload: JSON.stringify(payload),
       muteHttpExceptions: true
     };
@@ -41,10 +40,10 @@ function sendLoadingAnimation(userId) {
 }
 
 /**
- * Push Simple Text Message (Fallback)
+ * 2. Push Simple Text Message (Fallback)
+ * ส่งข้อความแบบ Push (เสียเงิน/โควต้า) ใช้เมื่อไม่มี ReplyToken
  */
 function pushSimpleMessage(userId, text) {
-  // โค้ดที่ใช้ใน LineAPI.gs ต้นฉบับ (มีอยู่แล้ว)
   try {
     if (!userId || !text) {
       Logger.log('⚠️ Missing userId or text');
@@ -60,9 +59,7 @@ function pushSimpleMessage(userId, text) {
     const options = {
       method: 'post',
       contentType: 'application/json',
-      headers: {
-        'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN
-      },
+      headers: { 'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN },
       payload: JSON.stringify(payload),
       muteHttpExceptions: true
     };
@@ -77,56 +74,90 @@ function pushSimpleMessage(userId, text) {
 }
 
 /**
- * Send LINE Messages (Dialogflow Fulfillment)
- * **รวม Logic การส่งจากโค้ด loading-animation.js เดิม**
+ * 3. Send LINE Messages (Smart Handler)
+ * รองรับทั้ง Reply (ฟรี) และ Push (เสียเงิน) อัตโนมัติ
+ * @param {string} userId - User ID
+ * @param {object} data - Dialogflow Response Object
+ * @param {string|null} replyToken - Reply Token (ถ้ามี)
  */
-function sendLineMessages(userId, dialogflowResponse) {
-  const messages = dialogflowResponse.messages;
-  if (!messages || messages.length === 0) {
-    Logger.log('⚠️ No messages to send.');
-    return;
-  }
-
-  // ✅ Validate messages (ใช้ logic การกรองของโค้ดเดิมของคุณ)
-  const validMessages = messages.slice(0, 5).filter(msg => {
-    // (ใช้โค้ด validation ที่คุณมีอยู่แล้ว)
-    if (!msg.type) return false;
-    if (msg.type === 'text' && (!msg.text || msg.text.trim() === '')) return false;
-    if (msg.type === 'flex' && (!msg.altText || !msg.contents)) return false;
-    return true;
+function sendLineMessages(userId, data, replyToken = null) {
+  const messages = data.messages || [];
+  
+  // กรองข้อความที่ไม่มีเนื้อหา
+  const validMessages = messages.filter(msg => {
+     if (msg.type === 'text' && (!msg.text || msg.text.trim() === '')) return false;
+     if (msg.type === 'flex' && (!msg.altText || !msg.contents)) return false;
+     return true;
   });
 
   if (validMessages.length === 0) {
-    Logger.log('⚠️ No valid messages after filtering');
-    pushSimpleMessage(userId, 'ขออภัยครับ เกิดข้อผิดพลาดในการส่งข้อความ');
+    Logger.log('⚠️ No valid messages to send.');
     return;
   }
 
-  const payload = {
-    to: userId,
-    messages: validMessages
-  };
+  // --------------------------------------------------
+  // 🟢 CASE 1: ใช้ Reply Message (ประหยัด, เร็ว, ฟรี)
+  // --------------------------------------------------
+  if (replyToken) {
+    try {
+        const url = LINE_CONFIG.API_ENDPOINTS.REPLY_MESSAGE;
+        const payload = {
+          replyToken: replyToken,
+          messages: validMessages
+        };
 
-  const options = {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { 
-      'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN 
-    },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  };
+        const options = {
+          method: 'post',
+          contentType: 'application/json',
+          headers: { 'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN },
+          payload: JSON.stringify(payload),
+          muteHttpExceptions: true
+        };
 
-  const response = UrlFetchApp.fetch(LINE_CONFIG.API_ENDPOINTS.PUSH_MESSAGE, options);
-  Logger.log('📬 LINE API Response Code: ' + response.getResponseCode());
+        const response = UrlFetchApp.fetch(url, options);
+        if (response.getResponseCode() === 200) {
+          Logger.log(`✅ Reply sent successfully.`);
+          return; 
+        } else {
+          Logger.log(`⚠️ Reply failed (Code: ${response.getResponseCode()}). Trying Push...`);
+        }
+    } catch (e) {
+        Logger.log(`⚠️ Reply error: ${e.message}. Trying Push...`);
+    }
+  }
 
-  if (response.getResponseCode() !== 200) {
-    Logger.log('❌ LINE API Error: ' + response.getContentText());
+  // --------------------------------------------------
+  // 🟠 CASE 2: ใช้ Push Message (Fallback)
+  // --------------------------------------------------
+  try {
+      const pushUrl = LINE_CONFIG.API_ENDPOINTS.PUSH_MESSAGE;
+      const pushPayload = {
+        to: userId,
+        messages: validMessages
+      };
+
+      const pushOptions = {
+        method: 'post',
+        contentType: 'application/json',
+        headers: { 'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN },
+        payload: JSON.stringify(pushPayload),
+        muteHttpExceptions: true
+      };
+
+      const pushResponse = UrlFetchApp.fetch(pushUrl, pushOptions);
+      if (pushResponse.getResponseCode() !== 200) {
+        Logger.log(`❌ Push failed: ${pushResponse.getContentText()}`);
+      } else {
+        Logger.log(`✅ Push sent successfully.`);
+      }
+  } catch (error) {
+      Logger.log(`❌ Critical Error in sendLineMessages: ${error.message}`);
   }
 }
 
 /**
- * Get User Profile (สำคัญสำหรับ FollowerService - มีอยู่ใน LineAPI.gs ต้นฉบับแล้ว)
+ * 4. Get User Profile
+ * ดึงข้อมูลโปรไฟล์ผู้ใช้ (ชื่อ, รูป, สถานะ)
  */
 function getUserProfile(userId) {
   try {
@@ -138,16 +169,13 @@ function getUserProfile(userId) {
     const url = `${LINE_CONFIG.API_ENDPOINTS.GET_PROFILE}/${userId}`; 
     const options = {
       method: 'get',
-      headers: {
-        'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN
-      },
+      headers: { 'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN },
       muteHttpExceptions: true
     };
     const response = UrlFetchApp.fetch(url, options);
-    const statusCode = response.getResponseCode();
     
-    if (statusCode !== 200) {
-      Logger.log(`❌ Failed to get profile: ${statusCode}`);
+    if (response.getResponseCode() !== 200) {
+      Logger.log(`❌ Failed to get profile: ${response.getResponseCode()}`);
       return null;
     }
     
@@ -156,7 +184,6 @@ function getUserProfile(userId) {
     return profile;
   } catch (error) {
     Logger.log(`❌ Error getting profile: ${error.message}`);
-    // ใช้ Fallback ตาม SYSTEM_CONFIG ที่ถูกกำหนดไว้ใน Config.gs
     return {
       displayName: SYSTEM_CONFIG.DEFAULTS.UNKNOWN_DISPLAY_NAME || 'Unknown',
       pictureUrl: '',

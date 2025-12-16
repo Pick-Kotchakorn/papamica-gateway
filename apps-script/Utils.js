@@ -482,3 +482,54 @@ function testUtilityFunctions() {
   Logger.log('=' .repeat(60));
   Logger.log('✅ Utility Functions test completed!');
 }
+
+/**
+ * 💾 Save Image from LINE to Google Drive
+ * @param {string} messageId - ID ของข้อความรูปภาพ
+ * @param {string} fileName - ชื่อไฟล์ที่ต้องการตั้ง
+ */
+function saveImageToDrive(messageId, fileName) {
+  try {
+    const token = LINE_CONFIG.CHANNEL_ACCESS_TOKEN; // ดึง Token จาก Config
+    const url = `https://api-data.line.me/v2/bot/message/${messageId}/content`;
+    
+    // ดึงรูปภาพจาก LINE Server
+    const response = UrlFetchApp.fetch(url, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    
+    // ระบุ Folder ID ที่คุณสร้างไว้
+    const FOLDER_ID = '10Zq_oPIBIUL491F88vGZ5MA7FPvuEJZB'; // <--- ⚠️ ใส่รหัส Folder ID ตรงนี้
+    const folder = DriveApp.getFolderById(FOLDER_ID);
+    
+    // สร้างไฟล์ใน Drive
+    const blob = response.getBlob();
+    const file = folder.createFile(blob);
+    file.setName(fileName + '.jpg'); 
+    
+    // เปิดสิทธิ์ให้ดูได้ (เพื่อให้แสดงใน Sheet หรือ App อื่นได้ง่าย)
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    return file.getUrl(); // ส่ง Link กลับไปบันทึก
+  } catch (error) {
+    Logger.log('❌ Error saving image to Drive: ' + error.message);
+    return 'Error: ' + error.message;
+  }
+}
+
+/**
+ * Safe Parse Float
+ * แปลงค่าเป็นตัวเลขทศนิยม ป้องกัน Error กรณีค่าเป็น null หรือ empty
+ * @param {any} value - ค่าที่ต้องการแปลง
+ * @return {number} ตัวเลขทศนิยม (ถ้าแปลงไม่ได้จะได้ 0)
+ */
+function safeParseFloat(value) {
+  if (value === undefined || value === null || value === '') {
+    return 0;
+  }
+  // ลบ comma ออกก่อนแปลง (เช่น "1,000.50" -> 1000.50)
+  const cleanValue = String(value).replace(/,/g, '');
+  const number = parseFloat(cleanValue);
+  
+  return isNaN(number) ? 0 : number;
+}

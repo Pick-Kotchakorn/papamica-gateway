@@ -1,54 +1,25 @@
 // ========================================
-// 📨 EVENTHANDLER.GS - CHAT FLOW EDITION (V2.5 - MarkAsRead Ready)
-// ========================================
-// ไฟล์นี้จัดการ Events ต่างๆ จาก LINE
-// ปรับปรุง: แยก Logic เป็น SYNC (ตอบกลับ) และ ASYNC (บันทึกข้อมูล) เพื่อประสิทธิภาพ
-
-// Note: ต้องพึ่งพา LineAPI.gs, SheetService.gs, FollowerService.gs, 
-// DialogflowService.gs, ReportStateService.js, Utils.js
-
-// ========================================
-// 1. Message Router (ใช้ใน Main.js)
+// 📨 EVENTHANDLER.GS - FULL VERSION (Oil Report + Logging + Fix ReplyToken)
 // ========================================
 
 /**
- * Handle Message Event (จัดการตามประเภทข้อความ)
- * SYNC PHASE: เน้นการตอบกลับ LINE เท่านั้น!
+ * 1. Message Router
+ * ฟังก์ชันหลักในการแยกประเภทข้อความและส่งไปยัง Handler ที่เหมาะสม
  */
 function handleMessageEvent(event) {
   try {
     const userId = event.source?.userId;
     const messageType = event.message?.type;
-    // 💡 NEW: ดึง Read Token จาก Event Object
-    const readToken = event.message?.markAsReadToken; 
+    const readToken = event.message?.markAsReadToken;
     
     if (!messageType || !userId) return;
 
-    // ----------------------------------------------------
-    // 💡 NEW: MARK AS READ (ทำงานเร็วที่สุด, ก่อน Loading Animation)
-    // ----------------------------------------------------
+    // ⚡ Fast Action: Mark as Read
     if (readToken && typeof markAsRead === 'function') {
-      // เรียก Mark as Read (จะใช้ retry ภายใน LineAPI.js)
       markAsRead(readToken);
     }
-    // ----------------------------------------------------
-    
-    // ----------------------------------------------------
-    // 🟢 CHAT FLOW INTERCEPTOR
-    // ตรวจสอบก่อนว่า User อยู่ในระหว่างขั้นตอนรายงานหรือไม่?
-    // ----------------------------------------------------
-    if (typeof getReportState === 'function') {
-      const currentState = getReportState(userId); // จาก ReportStateService.js
-      
-      if (currentState) {
-        Logger.log(`🔄 User ${userId} is in state: ${currentState.step} (Sync Intercept)`);
-        handleOilReportFlow(event, currentState); // Oil Report Flow ถูกคงไว้ใน SYNC เพราะต้องจบ Flow ด้วยคำตอบสุดท้าย
-        return;
-      }
-    }
-    // ----------------------------------------------------
 
-    Logger.log(`📨 Message type: ${messageType}`);
+    Logger.log(`📨 Message type: ${messageType} from ${userId}`);
 
     switch (messageType) {
       case 'text':
@@ -56,411 +27,314 @@ function handleMessageEvent(event) {
         break;
         
       case 'image':
-      case 'video':
-      case 'audio':
-      case 'file':
-      case 'location':
-      case 'sticker':
-        // ไม่ต้องตอบกลับ/บันทึกใน SYNC PHASE - งานบันทึกถูกย้ายไป ASYNC
-        Logger.log(`ℹ️ Media/Sticker received. Response/Save deferred to ASYNC.`);
+        // ✅ ตรวจสอบก่อนว่าเป็นรูปสำหรับรายงานน้ำมันหรือไม่?
+        const isOilReport = handleOilReportImage(event);
+        
+        if (!isOilReport) {
+           // ถ้าไม่ใช่รูปรายงานน้ำมัน ให้บันทึก Interaction ว่ามีการส่งรูปมา
+           updateFollowerInteraction(userId);
+           Logger.log(`ℹ️ General Image received.`);
+        }
         break;
         
       default:
         Logger.log(`⚠️ Unsupported message type: ${messageType}`);
-        pushSimpleMessage(event.source?.userId, SYSTEM_CONFIG.MESSAGES.ERROR);
         break;
     }
     
   } catch (error) {
-    Logger.log(`❌ Error in handleMessageEvent (Sync): ${error.message}`);
-    pushSimpleMessage(event.source?.userId, SYSTEM_CONFIG.MESSAGES.ERROR);
+    Logger.log(`❌ Error in handleMessageEvent: ${error.message}`);
   }
 }
 
-// ========================================
-// 2. Core Handlers (Text & Postback - SYNC)
-// ========================================
-
 /**
- * Handle Text Message (Logic หลัก: Trigger Chat Flow / Dialogflow / Maintenance)
- * SYNC PHASE: เน้นการตอบกลับ LINE เท่านั้น! (ลบ Sheet Write ออก)
+ * 2. Handle Text Message
+ * จัดการข้อความตัวอักษร + Dialogflow + Logging
  */
 function handleTextMessage(event) {
   const userId = event.source?.userId;
   const userMessage = event.message?.text?.trim();
+  const replyToken = event.replyToken; // ✅ รับ Reply Token
 
   if (!userId || !userMessage) return;
 
   try {
     sendLoadingAnimation(userId);
     
-    // ====================================================
-    // 🟢 CHAT FLOW TRIGGER (Sync - ตอบกลับเพื่อขอข้อมูลขั้นถัดไป)
-    // ====================================================
-    const branchMap = {
-        'kingsquare': 'KSQ', 'ksq': 'KSQ',
-        'emquartier': 'EMQ', 'emq': 'EMQ',
-        'one bangkok': 'ONB', 'onb': 'ONB'
-    };
+    // ดึงข้อมูล Profile เพื่อใช้บันทึก Log
+    const profile = getUserProfile(userId);
+    const displayName = profile.displayName || 'Unknown';
 
-    const userMessageLower = userMessage.toLowerCase();
-    const selectedBranchCode = branchMap[userMessageLower];
+    let aiResponse = '';
+    let intent = 'N/A';
 
-    if (selectedBranchCode) {
-        Logger.log(`🚀 Starting Oil Report Flow for branch: ${selectedBranchCode} (Sync Phase)`);
-        
-        // 1. ตั้งสถานะเป็น "รอรับยอดเงิน"
-        setReportState(userId, 'AWAITING_AMOUNT', { branch: selectedBranchCode });
-        
-        // 2. ตอบกลับเพื่อขอข้อมูลขั้นถัดไป
-        const replyText = `📍 สาขา: ${selectedBranchCode}\n💰 กรุณาพิมพ์ "ยอดขาย" (เฉพาะตัวเลข) ส่งมาได้เลยครับ`;
-        pushSimpleMessage(userId, replyText);
-        
-        // 🛑 จบการทำงานที่นี่ (งานบันทึกจะถูกทำใน ASYNC)
-        return; 
-    }
-    // ====================================================
-        
     // ----------------------------------------------------
-    // LOGIC เดิม: Dialogflow / Hybrid AI (SYNC)
+    // 🧠 Dialogflow Processing
     // ----------------------------------------------------
     if (SYSTEM_CONFIG.FEATURES.DIALOGFLOW_ENABLED) {
-        const dialogflowResponse = queryDialogflow(userMessage, userId);
+      const dfResponse = queryDialogflow(userMessage, userId);
+      const intentName = dfResponse.intent;
+      const parameters = dfResponse.parameters;
 
-        if (dialogflowResponse && dialogflowResponse.messages) {
-            
-            const fulfillmentText = dialogflowResponse.fulfillmentText?.trim() || '';
-            
-            if (fulfillmentText === 'TRIGGER_BOOKING_TEMPLATE') {
-                if (typeof getBookingTemplate === 'function') {
-                   const bookingMessages = getBookingTemplate();
-                   sendLineMessages(userId, { messages: bookingMessages });
-                }
-            } else {
-                const confidence = dialogflowResponse.confidence || 0;
-                const CONFIDENCE_THRESHOLD = SYSTEM_CONFIG.DEFAULTS.DIALOGFLOW_CONFIDENCE_THRESHOLD || 0.65; 
-                
-                if (confidence < CONFIDENCE_THRESHOLD) {
-                    const aiResponseText = queryExternalAI(userMessage); 
-                    sendLineMessages(userId, { messages: [{ type: 'text', text: aiResponseText }] });
-                } else {
-                    sendLineMessages(userId, dialogflowResponse);
-                }
-            }
-            
-        } else {
-            const aiResponseText = queryExternalAI(userMessage); 
-            sendLineMessages(userId, { messages: [{ type: 'text', text: aiResponseText }] });
-        }
-        
-    } else {
-      // Manual Mode Logic (SYNC)
-      if (SYSTEM_CONFIG.FEATURES.AUTO_RESPONSE) {
-          const echoMessage = SYSTEM_CONFIG.MESSAGES.ECHO_TEMPLATE.replace('{message}', userMessage);
-          pushSimpleMessage(userId, echoMessage);
+      // ====================================================
+      // 🟢 CASE 1: เริ่มต้น (เรียกเมนู Flex Message)
+      // Intent: oil-report-start
+      // ====================================================
+      if (intentName === 'oil-report-start') {
+        sendLineMessages(userId, dfResponse, replyToken); // ✅ ส่ง replyToken
+        intent = intentName;
+        aiResponse = '[Flex Message: Branch Selection Menu]';
       }
+
+      // ====================================================
+      // 🟢 CASE 2: เลือกสาขา (รับค่าจาก Entity @branch)
+      // Intent: oil-report-select-branch
+      // ====================================================
+      else if (intentName === 'oil-report-select-branch' && parameters.branch) {
+        const branchCode = parameters.branch;
+        Logger.log(`📍 Selected Branch: ${branchCode}`);
+
+        // ตั้งค่าสถานะ: รอรับยอดเงิน
+        setReportState(userId, 'AWAITING_AMOUNT', { branch: branchCode });
+        
+        sendLineMessages(userId, dfResponse, replyToken); // ✅ ส่ง replyToken
+        intent = intentName;
+        aiResponse = `[Branch Selected: ${branchCode}]`;
+      }
+
+      // ====================================================
+      // 🟢 CASE 3: ระบุยอดเงิน (รับตัวเลข)
+      // Intent: Oil Report - Amount
+      // ====================================================
+      else if (intentName === 'Oil Report - Amount' && parameters.amount) {
+         const currentState = getReportState(userId);
+         
+         if (currentState && currentState.step === 'AWAITING_AMOUNT') {
+            const amount = parseFloat(parameters.amount);
+            
+            // อัปเดตสถานะ: รอรับรูป พร้อมเก็บยอดเงิน
+            setReportState(userId, 'AWAITING_IMAGE', { ...currentState.data, amount: amount });
+            
+            sendLineMessages(userId, dfResponse, replyToken); // ✅ ส่ง replyToken
+            intent = intentName;
+            aiResponse = `[Amount Received: ${amount}]`;
+         } else {
+             // กรณีพิมพ์ตัวเลขแต่ไม่ได้อยู่ใน Flow รายงาน
+             if (dfResponse.messages) {
+               sendLineMessages(userId, dfResponse, replyToken);
+             }
+         }
+      }
+      
+      // ====================================================
+      // 🟢 Default Case: สนทนาทั่วไป
+      // ====================================================
+      else {
+        if (dfResponse.messages) {
+          sendLineMessages(userId, dfResponse, replyToken); // ✅ ส่ง replyToken
+          intent = intentName || 'dialogflow.general';
+          aiResponse = '[Dialogflow Response]';
+        }
+      }
+      
+    } else {
+      // 🔴 Manual Mode (Dialogflow Disabled)
+      pushSimpleMessage(userId, SYSTEM_CONFIG.MESSAGES.MAINTENANCE);
+      intent = 'manual.maintenance';
+      aiResponse = SYSTEM_CONFIG.MESSAGES.MAINTENANCE;
     }
     
+    // ----------------------------------------------------
+    // 📊 Logging System
+    // ----------------------------------------------------
+    
+    // 1. อัปเดตสถิติการโต้ตอบของผู้ใช้ (Follower Interaction)
+    updateFollowerInteraction(userId);
+
+    // 2. บันทึกบทสนทนา (Conversation Log)
+    saveConversation({
+      userId: userId,
+      displayName: displayName,
+      userMessage: userMessage,
+      aiResponse: aiResponse,
+      intent: intent,
+      timestamp: new Date()
+    });
+    
   } catch (error) {
-    Logger.log(`❌ Error in handleTextMessage (Sync): ${error.message}`);
+    Logger.log(`❌ Error in handleTextMessage: ${error.message}`);
     pushSimpleMessage(userId, SYSTEM_CONFIG.MESSAGES.ERROR);
   }
 }
 
 /**
- * Handle Postback Event
- * SYNC PHASE: เน้นการตอบกลับ LINE เท่านั้น! (ลบ Sheet Write ออก)
+ * 3. Handle Oil Report Image
+ * จัดการรูปภาพสลิป บันทึกลง Drive และ Sheet
+ */
+function handleOilReportImage(event) {
+  const userId = event.source.userId;
+  const messageId = event.message.id;
+  
+  // ตรวจสอบว่า User คนนี้กำลังทำรายการค้างอยู่ที่ขั้นตอน 'รอรูป' หรือไม่?
+  const state = getReportState(userId);
+
+  if (state && state.step === 'AWAITING_IMAGE') {
+      try {
+        pushSimpleMessage(userId, '⏳ กำลังบันทึกข้อมูลและอัปโหลดรูปภาพ...');
+
+        // 1. บันทึกรูปภาพลง Drive
+        const timestamp = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyyMMdd_HHmm');
+        const fileName = `SLIP_${state.data.branch}_${timestamp}`;
+        const driveImageUrl = saveImageToDrive(messageId, fileName);
+
+        // 2. เตรียมข้อมูลบันทึกลง Sheet
+        const finalData = {
+          userId: userId,
+          branch: state.data.branch,
+          amount: state.data.amount,
+          imageUrl: driveImageUrl, 
+          type: 'deposit'
+        };
+
+        // 3. บันทึกและคำนวณยอดสะสม
+        const summary = saveOilReport(finalData);
+
+        // 4. Helper Format Number
+        const formatNum = (num) => {
+             return Number(num).toLocaleString('th-TH', {minimumFractionDigits: 2});
+        };
+
+        // 5. แจ้งผลลัพธ์
+        const replyText = `✅ บันทึกสำเร็จ!\n\n` +
+                          `📍 สาขา: ${summary.branch}\n` +
+                          `💰 ยอดครั้งนี้: ${formatNum(summary.latest)} บ.\n` +
+                          `📊 สะสมเดือนนี้: ${formatNum(summary.accumulated)} บ.\n` + 
+                          `🎯 เป้าหมาย: ${formatNum(summary.goal)} บ.\n` + 
+                          `🖼️ หลักฐาน: บันทึกลง Drive เรียบร้อย`;
+        
+        pushSimpleMessage(userId, replyText);
+        
+        // 6. ล้างสถานะ & Logging
+        clearReportState(userId);
+        updateFollowerInteraction(userId);
+
+      } catch (error) {
+        Logger.log('Error processing image: ' + error.message);
+        pushSimpleMessage(userId, '❌ เกิดข้อผิดพลาด: ' + error.message);
+      }
+      return true; // บอกว่า Process แล้ว
+  }
+  return false; // ไม่ใช่ Flow รายงาน
+}
+
+/**
+ * 4. Handle Follow Event
+ * บันทึกผู้ติดตามใหม่ (ไม่ต้องส่งข้อความต้อนรับ)
+ */
+function handleFollowEvent(event) {
+  try {
+    const userId = event.source?.userId;
+    const timestamp = new Date(event.timestamp);
+    if (!userId) return;
+    
+    Logger.log(`👤 New Follower: ${userId}`);
+    
+    // 1️⃣ ดึงข้อมูล Profile จาก LINE API
+    const profile = getUserProfile(userId);
+    
+    // 2️⃣ ตรวจสอบข้อมูลเดิม (เพื่อดูว่าเป็นเพื่อนเก่ากลับมาใหม่หรือเปล่า)
+    const existingData = getFollowerDataSheet(userId); // เรียกฟังก์ชัน helper จาก SheetService
+    const followCount = existingData ? existingData.followCount + 1 : 1;
+    const firstFollowDate = existingData ? existingData.firstFollowDate : timestamp;
+    
+    // 3️⃣ บันทึกข้อมูลลง Sheet Followers
+    saveFollower({
+      userId: userId,
+      displayName: profile.displayName || 'Unknown',
+      pictureUrl: profile.pictureUrl || '',
+      language: profile.language || 'unknown',
+      statusMessage: profile.statusMessage || '',
+      firstFollowDate: firstFollowDate,
+      lastFollowDate: timestamp,
+      followCount: followCount,
+      status: 'active',
+      sourceChannel: 'unknown',
+      tags: 'new-customer',
+      lastInteraction: timestamp,
+      totalMessages: 0
+    });
+    
+    // ❌ ตัดส่วน welcomeMessage ออกตามคำสั่ง ❌
+    // const welcomeMessage = '...';
+    // pushSimpleMessage(userId, welcomeMessage);
+
+    // 4️⃣ บันทึก Log ลง Conversations (ระบุว่าไม่ได้ส่งข้อความ)
+    saveConversation({ 
+      userId: userId,
+      displayName: profile.displayName || 'Unknown',
+      userMessage: '[Follow Event]',
+      aiResponse: '[No Welcome Message]', // ปรับ Log ให้ตรงตามจริง
+      intent: 'system.follow',
+      timestamp: timestamp
+    });
+
+  } catch (error) {
+    Logger.log(`❌ Error in handleFollowEvent: ${error.message}`);
+  }
+}
+
+/**
+ * 5. Handle Unfollow Event
+ * อัปเดตสถานะเป็น Blocked
+ */
+function handleUnfollowEvent(event) {
+    const userId = event.source?.userId;
+    const timestamp = new Date(event.timestamp);
+    if (!userId) return;
+    
+    Logger.log(`👋 User Unfollowed: ${userId}`);
+    
+    // อัปเดตสถานะใน Sheet Followers
+    updateFollowerStatus(userId, 'blocked', timestamp);
+}
+
+/**
+ * 6. Handle Postback Event
+ * จัดการการกดปุ่ม (ถ้ามี)
  */
 function handlePostbackEvent(event) {
   const userId = event.source?.userId;
   const postbackData = event.postback?.data;
+  const replyToken = event.replyToken;
 
   if (!userId || !postbackData) return;
 
   try {
     sendLoadingAnimation(userId);
     
-    // Note: Postback event ไม่มี markAsReadToken อยู่ใน Event Object จึงไม่สามารถเรียก MarkAsRead ได้โดยตรง
-    
+    // Log Postback
+    saveConversation({
+        userId: userId,
+        displayName: 'User',
+        userMessage: `[Postback] ${postbackData}`,
+        aiResponse: 'Processing...',
+        intent: 'postback',
+        timestamp: new Date()
+    });
+
     if (SYSTEM_CONFIG.FEATURES.DIALOGFLOW_ENABLED) {
         const dialogflowResponse = queryDialogflow(postbackData, userId);
         if (dialogflowResponse && dialogflowResponse.messages) {
-            sendLineMessages(userId, dialogflowResponse);
+            sendLineMessages(userId, dialogflowResponse, replyToken);
         }
     } else {
         pushSimpleMessage(userId, SYSTEM_CONFIG.MESSAGES.MAINTENANCE);
     }
     
+    updateFollowerInteraction(userId);
+    
   } catch (error) {
-    Logger.log(`❌ Error in handlePostbackEvent (Sync): ${error.message}`);
+    Logger.log(`❌ Error in handlePostbackEvent: ${error.message}`);
     pushSimpleMessage(userId, SYSTEM_CONFIG.MESSAGES.ERROR);
   }
-}
-
-/**
- * Handle Follow Event
- * SYNC PHASE: เน้นการส่ง Welcome Message ทันที! (ลบ Profile Fetch & Sheet Write ออก)
- */
-function handleFollowEvent(event) {
-  try {
-    const userId = event.source?.userId;
-    if (!userId) return;
-    
-    Logger.log(`👤 New Follower: ${userId} (Sync Phase - Send Welcome)`);
-    
-    // 💡 ส่ง Welcome Message ทันที!
-    const welcomeMessage = '🎉 ยินดีต้อนรับสู่ Papamica Bot ค่ะ! หากต้องการรายงานยอดขาย กรุณาพิมพ์ชื่อสาขา Kingsquare, Emquartier หรือ One Bangkok';
-    pushSimpleMessage(userId, welcomeMessage);
-    
-    // 🛑 ลบ: Profile Fetch, saveFollower, saveConversation (ย้ายไป ASYNC)
-
-  } catch (error) {
-    Logger.log(`❌ Error in handleFollowEvent (Sync): ${error.message}`);
-  }
-}
-
-/**
- * Handle Unfollow Event (SYNC)
- * ไม่ต้องทำอะไรใน SYNC PHASE
- */
-function handleUnfollowEvent(event) {
-  Logger.log('👋 Unfollow event received. Processing deferred to ASYNC.');
-}
-
-
-// ========================================
-// 3. Media Handling (Sync)
-// ========================================
-
-/**
- * ⚙️ Handle Oil Report Flow (ฟังก์ชันสำหรับจัดการ Flow)
- */
-function handleOilReportFlow(event, state) {
-  const userId = event.source.userId;
-  const msg = event.message;
-
-  // --- CASE: ยกเลิก ---
-  if (msg.type === 'text' && msg.text.trim() === 'ยกเลิก') {
-    clearReportState(userId);
-    pushSimpleMessage(userId, '❌ ยกเลิกรายการเรียบร้อยครับ หากต้องการรายงานใหม่ กรุณาพิมพ์ชื่อสาขาอีกครั้ง');
-    return;
-  }
-
-  // --- STEP 1: รอรับยอดเงิน ---
-  if (state.step === 'AWAITING_AMOUNT') {
-    if (msg.type === 'text') {
-      const amountText = msg.text.replace(/,/g, '').trim(); 
-      const amount = parseFloat(amountText);
-
-      if (!isNaN(amount) && amount > 0) {
-        const nextData = { ...state.data, amount: amount };
-        setReportState(userId, 'AWAITING_IMAGE', nextData);
-        pushSimpleMessage(userId, `✅ รับยอด ${formatNumber(amount)} บาท\n📸 กรุณา "ส่งรูปสลิป/บิล" เข้ามาเพื่อยืนยันครับ\n(พิมพ์ "ยกเลิก" เพื่อเริ่มใหม่)`);
-      } else {
-        pushSimpleMessage(userId, '⚠️ กรุณาพิมพ์เฉพาะ "ตัวเลข" เท่านั้นครับ (เช่น 500 หรือ 1250.50)');
-      }
-    } else {
-      pushSimpleMessage(userId, '⚠️ กรุณาพิมพ์ยอดเงินเป็นตัวเลขครับ');
-    }
-    return;
-  }
-
-  // --- STEP 2: รอรับรูปภาพ ---
-  if (state.step === 'AWAITING_IMAGE') {
-    if (msg.type === 'image') {
-      try {
-        // บันทึกรูปและข้อมูล
-        const imageUrl = getMediaContent(msg.id); 
-        const finalData = {
-          userId: userId,
-          branch: state.data.branch,
-          amount: state.data.amount,
-          imageUrl: imageUrl,
-          type: 'deposit' // 💡 NEW: ระบุประเภทธุรกรรมเป็น 'deposit'
-        };
-
-        const summary = saveOilReport(finalData); // <-- ส่ง type ไปด้วย
-
-        const replyText = `✅ บันทึกสำเร็จ!\n\n📍 สาขา: ${summary.branch}\n💰 ยอดครั้งนี้: ${formatNumber(summary.latest)} บ.\n📊 สะสมเดือนนี้: ${formatNumber(summary.accumulated)} บ.\n🎯 เป้าเดือนนี้: ${formatNumber(summary.goal)} บ.`;
-        pushSimpleMessage(userId, replyText);
-        clearReportState(userId);
-
-      } catch (error) {
-        Logger.log('Error in oil flow: ' + error.message);
-        pushSimpleMessage(userId, '❌ เกิดข้อผิดพลาดในการบันทึก: ' + error.message + '\nกรุณาลองส่งรูปใหม่อีกครั้งครับ');
-      }
-    } else {
-      pushSimpleMessage(userId, '⚠️ กรุณาส่งเป็น "รูปภาพ" เท่านั้นครับ 📸');
-    }
-    return;
-  }
-}
-
-function handleMediaMessage(event, mediaType, intentPrefix, aiResponseText) {
-  const userId = event.source?.userId;
-  if (userId) {
-    sendLoadingAnimation(userId); 
-  }
-}
-
-function handleVideoMessage(event) { handleMediaMessage(event, 'Video', 'media.video', 'Video received'); }
-function handleAudioMessage(event) { handleMediaMessage(event, 'Audio', 'media.audio', 'Audio received'); }
-function handleFileMessage(event) { handleMediaMessage(event, 'File', 'media.file', 'File received'); }
-function handleLocationMessage(event) { handleMediaMessage(event, 'Location', 'media.location', 'Location received'); }
-function handleStickerMessage(event) { handleMediaMessage(event, 'Sticker', 'media.sticker', 'Sticker received'); }
-
-// ========================================
-// 4. ASYNCHRONOUS HANDLERS (Unchanged)
-// ========================================
-
-/**
- * ASYNC: Handles saving conversation and updating interaction for message events.
- * @param {Object} event - The full event object
- */
-function asyncHandleMessage(event) {
-    const userId = event.source?.userId;
-    const messageType = event.message?.type;
-    const userMessage = event.message?.text?.trim() || `[${messageType} Message]`;
-    
-    if (!userId) return;
-
-    let intentName = 'async.message';
-    let aiResponseText = '[Async Save: Response Sent in Sync Phase]';
-
-    if (messageType === 'text') {
-        const branchMap = {
-            'kingsquare': 'KSQ', 'ksq': 'KSQ',
-            'emquartier': 'EMQ', 'emq': 'EMQ',
-            'one bangkok': 'ONB', 'onb': 'ONB'
-        };
-        const userMessageLower = userMessage.toLowerCase();
-        if (branchMap[userMessageLower]) {
-            intentName = 'oil_report.start';
-            aiResponseText = '[Async Save: Oil Flow Initiated]';
-        } else {
-            intentName = 'chat.message';
-        }
-    } else if (messageType === 'image') {
-        intentName = 'media.image';
-        aiResponseText = 'Image received (Async Save)';
-    } else if (messageType === 'video') {
-        intentName = 'media.video';
-        aiResponseText = 'Video received (Async Save)';
-    } else if (messageType === 'sticker') {
-        intentName = 'media.sticker';
-        aiResponseText = 'Sticker received (Async Save)';
-    }
-
-    // 1. บันทึก Conversation
-    saveConversation({ 
-        userId: userId,
-        userMessage: userMessage, 
-        aiResponse: aiResponseText, 
-        intent: intentName,
-        timestamp: new Date(event.timestamp)
-    });
-
-    // 2. อัปเดต Follower Interaction
-    updateFollowerInteraction(userId);
-}
-
-/**
- * ASYNC: Handles saving conversation for postback events.
- * @param {Object} event - The full event object
- */
-function asyncHandlePostback(event) {
-    const userId = event.source?.userId;
-    const postbackData = event.postback?.data;
-
-    if (!userId || !postbackData) return;
-
-    // 1. บันทึก Conversation
-    saveConversation({
-        userId: userId,
-        userMessage: '[Postback] ' + postbackData,
-        aiResponse: '[Async Save: Response Sent in Sync Phase]',
-        intent: 'postback.async.save', 
-        timestamp: new Date(event.timestamp)
-    });
-
-    // 2. อัปเดต Follower Interaction
-    updateFollowerInteraction(userId);
-}
-
-
-/**
- * ASYNC: Handles the heavy part of Follow Event (Profile Fetch & Sheet Save)
- * @param {Object} event - The full event object
- */
-function asyncHandleFollow(event) {
-    const userId = event.source?.userId;
-    const timestamp = new Date(event.timestamp);
-    if (!userId) return;
-    
-    Logger.log(`👤 Processing Follower Profile/Save for ${userId} (Async Phase)`);
-    
-    // 1. Fetch Profile (Network I/O)
-    const profile = getUserProfile(userId); 
-    
-    // 2. Load Existing Data (Sheet I/O / Cache)
-    const existingData = getFollowerData(userId); 
-    
-    // 3. Prepare data and Save (Sheet I/O)
-    const followCount = existingData ? existingData.followCount + 1 : 1;
-    const firstFollowDate = existingData ? existingData.firstFollowDate : timestamp;
-    
-    saveFollower({ 
-      userId: userId,
-      displayName: profile.displayName || SYSTEM_CONFIG.DEFAULTS.UNKNOWN_DISPLAY_NAME,
-      pictureUrl: profile.pictureUrl || '',
-      language: profile.language || SYSTEM_CONFIG.DEFAULTS.UNKNOWN_LANGUAGE,
-      statusMessage: profile.statusMessage || '',
-      firstFollowDate: firstFollowDate,
-      lastFollowDate: timestamp,
-      followCount: followCount,
-      status: SYSTEM_CONFIG.DEFAULTS.FOLLOWER_STATUS, 
-      sourceChannel: SYSTEM_CONFIG.DEFAULTS.FOLLOWER_SOURCE,
-      tags: SYSTEM_CONFIG.DEFAULTS.FOLLOWER_TAGS,
-      lastInteraction: timestamp,
-      totalMessages: 0
-    });
-    
-    // 4. บันทึก Conversation
-    saveConversation({ 
-      userId: userId,
-      userMessage: '[Follow Event]',
-      aiResponse: '[SYSTEM] Follower saved (Async).',
-      intent: 'system.follow',
-      timestamp: timestamp
-    });
-}
-
-/**
- * ASYNC: Handles the heavy part of Unfollow Event (Status Update)
- * @param {Object} event - The full event object
- */
-function asyncHandleUnfollow(event) {
-    const userId = event.source?.userId;
-    const timestamp = new Date(event.timestamp);
-    if (!userId) return;
-    
-    Logger.log(`👋 Processing Unfollow for ${userId} (Async Phase)`);
-    // Update status (Sheet I/O)
-    updateFollowerStatus(userId, 'blocked', timestamp); 
-}
-
-// ========================================
-// 5. Helper Function (Unchanged)
-// ========================================
-
-function formatResponseForSheet(messages) {
-  if (!messages || messages.length === 0) return 'No response';
-  const responses = [];
-  messages.forEach((msg) => {
-    if (msg.type === 'text') responses.push(`[Text] ${msg.text}`);
-    else if (msg.type === 'image') responses.push(`[Image] ${msg.originalContentUrl}`);
-    else if (msg.type === 'flex') responses.push(`[Flex] ${msg.altText || 'Flex Message'}`);
-    else responses.push(`[${msg.type}] Unknown format`);
-  });
-  return responses.join('\n');
 }
