@@ -103,26 +103,46 @@ function handleTextMessage(event) {
       }
 
       // ====================================================
-      // 🟢 CASE 3: ระบุยอดเงิน (รับตัวเลข)
+      // 🟢 CASE 3: ระบุยอดเงิน (รับตัวเลข) - (โค้ดที่ถูกปรับปรุง)
       // Intent: Oil Report - Amount
       // ====================================================
       else if (intentName === 'Oil Report - Amount' && parameters.amount) {
          const currentState = getReportState(userId);
-         
+         const rawAmount = parameters.amount;
+         const amount = parseFloat(rawAmount); // ลองแปลงค่าเป็นตัวเลข
+
          if (currentState && currentState.step === 'AWAITING_AMOUNT') {
-            const amount = parseFloat(parameters.amount);
             
-            // อัปเดตสถานะ: รอรับรูป พร้อมเก็บยอดเงิน
-            setReportState(userId, 'AWAITING_IMAGE', { ...currentState.data, amount: amount });
-            
-            sendLineMessages(userId, dfResponse, replyToken); // ✅ ส่ง replyToken
-            intent = intentName;
-            aiResponse = `[Amount Received: ${amount}]`;
+            // 1. ตรวจสอบความถูกต้องของตัวเลข (ต้องเป็นตัวเลขที่ถูกต้องและมากกว่า 0)
+            if (isNaN(amount) || amount <= 0) {
+                Logger.log(`⚠️ Invalid amount received (not positive number): ${rawAmount}. State kept at AWAITING_AMOUNT.`);
+                
+                // ส่งข้อความตอบกลับจาก Dialogflow (DF ควรตั้งค่าให้ตอบกลับข้อความเตือนว่ายอดเงินไม่ถูกต้อง)
+                if (dfResponse.messages) {
+                    sendLineMessages(userId, dfResponse, replyToken); 
+                }
+                intent = 'Oil Report - Invalid Amount';
+                aiResponse = '[DF Response: Invalid Amount Alert]';
+
+                // **สำคัญ: ไม่เปลี่ยนสถานะ (ผู้ใช้ต้องป้อนใหม่)**
+                
+            } else {
+                // 2. ยอดเงินถูกต้อง: อัปเดตสถานะเป็นรอรูป พร้อมเก็บยอดเงิน
+                setReportState(userId, 'AWAITING_IMAGE', { ...currentState.data, amount: amount });
+                
+                sendLineMessages(userId, dfResponse, replyToken); // ✅ ส่ง replyToken (ข้อความจาก DF ควรบอกให้ส่งรูป)
+                intent = intentName;
+                aiResponse = `[Amount Received & State AWAITING_IMAGE: ${amount}]`;
+            }
          } else {
-             // กรณีพิมพ์ตัวเลขแต่ไม่ได้อยู่ใน Flow รายงาน
+             // 3. กรณีพิมพ์ตัวเลขแต่ไม่ได้อยู่ใน Flow รายงาน (currentState ไม่ใช่ AWAITING_AMOUNT)
+             Logger.log('ℹ️ Amount received outside of AWAITING_AMOUNT state. Sending DF response.');
              if (dfResponse.messages) {
+               // ส่งข้อความตอบกลับจาก Dialogflow (DF ควรมี Fallback หรือข้อความทั่วไป)
                sendLineMessages(userId, dfResponse, replyToken);
              }
+             intent = 'Oil Report - Out of Flow (Amount)';
+             aiResponse = '[DF Response: Out of Flow]';
          }
       }
       
