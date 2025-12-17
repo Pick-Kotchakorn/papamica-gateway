@@ -3,7 +3,8 @@
 // ========================================
 
 /**
- * Get or Create Sheet (คงไว้ตามเดิม)
+ * Get or Create Sheet
+ * สร้าง Sheet ใหม่ถ้ายังไม่มี พร้อม Headers
  */
 function getOrCreateSheet(sheetName, headers = null) {
   try {
@@ -15,6 +16,12 @@ function getOrCreateSheet(sheetName, headers = null) {
       sheet = ss.insertSheet(sheetName);
       if (headers && headers.length > 0) {
         sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+        
+        // จัดรูปแบบ Header
+        const headerRange = sheet.getRange(1, 1, 1, headers.length);
+        headerRange.setFontWeight('bold');
+        headerRange.setBackground('#4285f4');
+        headerRange.setFontColor('#ffffff');
       }
     }
     return sheet;
@@ -24,80 +31,143 @@ function getOrCreateSheet(sheetName, headers = null) {
   }
 }
 
+
+// ========================================
+// 🛢️ OIL REPORT FUNCTIONS
+// ========================================
+
 /**
- * Save Oil Report (คงไว้ตามเดิม - สำหรับฟังก์ชันรายงานน้ำมัน)
+ * Save Oil Report
+ * บันทึกรายงานน้ำมันลง Sheet พร้อมคำนวณยอดสะสม
  */
 function saveOilReport(data) {
-  // ... (Code เดิมของคุณสำหรับ Oil Report) ...
-  // เพื่อความกระชับ ผมขอละส่วนนี้ไว้ (ใช้โค้ดเดิมได้เลย)
-  const ss = SpreadsheetApp.openById(SHEET_CONFIG.SPREADSHEET_ID);
-  const sheet = getOrCreateSheet('Oil_Reports', ['Timestamp', 'User ID', 'Branch', 'Amount', 'Type', 'Image URL', 'Month Key']);
-  
-  const timestamp = new Date();
-  const monthKey = Utilities.formatDate(timestamp, 'Asia/Bangkok', 'yyyy-MM');
-  
-  sheet.appendRow([
-    timestamp,
-    data.userId,
-    data.branch,
-    data.amount,
-    data.type,
-    data.imageUrl,
-    monthKey
-  ]);
-  
-  // คำนวณยอดสะสม (Logic เดิม)
-  const allData = sheet.getDataRange().getValues();
-  const headers = allData.shift();
-  const reportData = allData.map(row => {
-    let obj = {};
-    headers.forEach((header, i) => obj[header.toLowerCase().replace(/ /g, '_')] = row[i]);
-    return obj;
-  });
-
-  const currentMonthData = reportData.filter(row => {
-    const rowBranch = String(row['branch']);
-    const rowMonthKey = String(row['month_key']);
-    return rowBranch === String(data.branch) && rowMonthKey === monthKey;
-  });
-
-  const totalAccumulated = currentMonthData.reduce((sum, row) => {
-    const amount = safeParseFloat(row['amount']); 
-    const type = String(row['type'] || 'deposit'); 
-    return type === 'deposit' ? sum + amount : sum - amount;
-  }, 0); 
-  
-  const goal = SYSTEM_CONFIG.DEFAULTS.OIL_REPORT_GOAL || 10000;
-  
-  return {
-    branch: data.branch,
-    latest: data.amount,
-    accumulated: totalAccumulated,
-    goal: goal
-  };
+  try {
+    Logger.log('💾 Starting saveOilReport...');
+    Logger.log(`Data received: ${JSON.stringify(data)}`);
+    
+    // 1. เปิด Spreadsheet และ Sheet
+    const ss = SpreadsheetApp.openById(SHEET_CONFIG.SPREADSHEET_ID);
+    if (!ss) {
+      throw new Error('Cannot open spreadsheet. Check SPREADSHEET_ID in Config.');
+    }
+    
+    const sheetName = SHEET_CONFIG.SHEETS.OIL_REPORTS || 'Oil_Reports';
+    let sheet = ss.getSheetByName(sheetName);
+    
+    // 2. สร้าง Sheet ถ้ายังไม่มี
+    if (!sheet) {
+      Logger.log(`Creating new sheet: ${sheetName}`);
+      sheet = ss.insertSheet(sheetName);
+      
+      // สร้าง Header
+      const headers = ['Timestamp', 'User ID', 'Branch', 'Amount', 'Type', 'Image URL', 'Month Key'];
+      sheet.appendRow(headers);
+      
+      // จัดรูปแบบ Header
+      const headerRange = sheet.getRange(1, 1, 1, headers.length);
+      headerRange.setFontWeight('bold');
+      headerRange.setBackground('#4285f4');
+      headerRange.setFontColor('#ffffff');
+    }
+    
+    // 3. เตรียมข้อมูลสำหรับบันทึก
+    const timestamp = new Date();
+    const monthKey = Utilities.formatDate(timestamp, 'Asia/Bangkok', 'yyyy-MM');
+    
+    const rowData = [
+      timestamp,
+      data.userId,
+      data.branch,
+      data.amount,
+      data.type || 'deposit',
+      data.imageUrl,
+      monthKey
+    ];
+    
+    Logger.log(`Appending row: ${JSON.stringify(rowData)}`);
+    
+    // 4. บันทึกข้อมูล
+    sheet.appendRow(rowData);
+    Logger.log('✅ Row appended successfully');
+    
+    // 5. คำนวณยอดสะสม
+    Logger.log('Calculating accumulated amount...');
+    
+    const allData = sheet.getDataRange().getValues();
+    const headers = allData.shift(); // ลบ header row
+    
+    // แปลงเป็น Object Array
+    const reportData = allData.map(row => {
+      let obj = {};
+      headers.forEach((header, i) => {
+        const key = header.toLowerCase().replace(/ /g, '_');
+        obj[key] = row[i];
+      });
+      return obj;
+    });
+    
+    // Filter ข้อมูลของสาขาและเดือนปัจจุบัน
+    const currentMonthData = reportData.filter(row => {
+      const rowBranch = String(row['branch'] || '').trim();
+      const rowMonthKey = String(row['month_key'] || '').trim();
+      const dataBranch = String(data.branch || '').trim();
+      
+      return rowBranch === dataBranch && rowMonthKey === monthKey;
+    });
+    
+    Logger.log(`Found ${currentMonthData.length} records for ${data.branch} in ${monthKey}`);
+    
+    // คำนวณยอดรวม
+    const totalAccumulated = currentMonthData.reduce((sum, row) => {
+      const amount = safeParseFloat(row['amount']); 
+      const type = String(row['type'] || 'deposit').toLowerCase(); 
+      return type === 'deposit' ? sum + amount : sum - amount;
+    }, 0);
+    
+    Logger.log(`Total accumulated: ${totalAccumulated}`);
+    
+    // 6. เตรียมผลลัพธ์
+    const goal = SYSTEM_CONFIG.DEFAULTS.OIL_REPORT_GOAL || 10000;
+    
+    const result = {
+      branch: data.branch,
+      latest: data.amount,
+      accumulated: totalAccumulated,
+      goal: goal
+    };
+    
+    Logger.log('✅ saveOilReport completed successfully');
+    Logger.log(`Result: ${JSON.stringify(result)}`);
+    
+    return result;
+    
+  } catch (error) {
+    Logger.log(`❌ Error in saveOilReport: ${error.message}`);
+    Logger.log(`Stack trace: ${error.stack}`);
+    throw new Error(`Sheet Save Error: ${error.message}`);
+  }
 }
 
 
-// ======================================================
-// 🟢 NEW FUNCTIONS ADAPTED FROM YOUR EXAMPLE CODE
-// ======================================================
+// ========================================
+// 👥 FOLLOWER & CONVERSATION FUNCTIONS
+// ========================================
 
 /**
- * Save to Google Sheet (Conversations)
- * ปรับใช้จากโค้ดตัวอย่าง: saveToSheet
+ * Save Conversation to Sheet
+ * บันทึกบทสนทนาระหว่าง User และ Bot
  */
 function saveConversation(data) {
   try {
     const ss = SpreadsheetApp.openById(SHEET_CONFIG.SPREADSHEET_ID);
-    // ใช้ชื่อ Sheet จาก Config หรือ Default 'Conversations'
-    const sheetName = INSIGHT_CONFIG.SHEETS.CONVERSATIONS || 'Conversations';
+    const sheetName = SHEET_CONFIG.SHEETS.CONVERSATIONS || 'Conversations';
     let sheet = ss.getSheetByName(sheetName);
     
     if (!sheet) {
       sheet = ss.insertSheet(sheetName);
       sheet.appendRow(['Timestamp', 'User ID', 'Display Name', 'User Message', 'Response Format', 'Intent']);
       
-      // จัดรูปแบบหัวตาราง (ตามตัวอย่าง)
+      // จัดรูปแบบหัวตาราง
       const headerRange = sheet.getRange(1, 1, 1, 6);
       headerRange.setFontWeight('bold');
       headerRange.setBackground('#4285f4');
@@ -120,12 +190,12 @@ function saveConversation(data) {
 
 /**
  * Save Follower to Sheet
- * ปรับใช้จากโค้ดตัวอย่าง: saveFollowerToSheet
+ * บันทึกหรืออัพเดทข้อมูลผู้ติดตาม
  */
 function saveFollower(data) {
   try {
     const ss = SpreadsheetApp.openById(SHEET_CONFIG.SPREADSHEET_ID);
-    const sheetName = INSIGHT_CONFIG.SHEETS.FOLLOWERS || 'Followers';
+    const sheetName = SHEET_CONFIG.SHEETS.FOLLOWERS || 'Followers';
     let sheet = ss.getSheetByName(sheetName);
     
     // สร้าง Sheet ใหม่ถ้ายังไม่มี
@@ -191,12 +261,12 @@ function saveFollower(data) {
 
 /**
  * Update Follower Status
- * ปรับใช้จากโค้ดตัวอย่าง: updateFollowerStatus
+ * อัพเดทสถานะของผู้ติดตาม (active/blocked)
  */
 function updateFollowerStatus(userId, status, timestamp) {
   try {
     const ss = SpreadsheetApp.openById(SHEET_CONFIG.SPREADSHEET_ID);
-    const sheetName = INSIGHT_CONFIG.SHEETS.FOLLOWERS || 'Followers';
+    const sheetName = SHEET_CONFIG.SHEETS.FOLLOWERS || 'Followers';
     const sheet = ss.getSheetByName(sheetName);
     
     if (!sheet) return;
@@ -216,12 +286,12 @@ function updateFollowerStatus(userId, status, timestamp) {
 
 /**
  * Update Follower Interaction
- * ปรับใช้จากโค้ดตัวอย่าง: updateFollowerInteraction
+ * อัพเดทข้อมูลการโต้ตอบของผู้ติดตาม
  */
 function updateFollowerInteraction(userId) {
   try {
     const ss = SpreadsheetApp.openById(SHEET_CONFIG.SPREADSHEET_ID);
-    const sheetName = INSIGHT_CONFIG.SHEETS.FOLLOWERS || 'Followers';
+    const sheetName = SHEET_CONFIG.SHEETS.FOLLOWERS || 'Followers';
     const sheet = ss.getSheetByName(sheetName);
     
     if (!sheet) return;
@@ -242,13 +312,13 @@ function updateFollowerInteraction(userId) {
 }
 
 /**
- * Get Follower Data (Helper from Example)
- * ใช้สำหรับดึงข้อมูลเพื่อนับ followCount
+ * Get Follower Data from Sheet
+ * ดึงข้อมูลผู้ติดตามเพื่อใช้ในการนับ followCount
  */
 function getFollowerDataSheet(userId) {
   try {
     const ss = SpreadsheetApp.openById(SHEET_CONFIG.SPREADSHEET_ID);
-    const sheetName = INSIGHT_CONFIG.SHEETS.FOLLOWERS || 'Followers';
+    const sheetName = SHEET_CONFIG.SHEETS.FOLLOWERS || 'Followers';
     const sheet = ss.getSheetByName(sheetName);
     
     if (!sheet) return null;
@@ -271,18 +341,130 @@ function getFollowerDataSheet(userId) {
   }
 }
 
+
+// ========================================
+// 🛠️ HELPER FUNCTIONS
+// ========================================
+
 /**
  * Find User Row in Sheet
- * ปรับใช้จากโค้ดตัวอย่าง: findUserRow
+ * หาแถวของ User ในแผ่นงาน
  */
 function findUserRow(sheet, userId) {
-  const data = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === userId) {
-      return i + 1; // คืนค่าเป็นเลขแถว (เริ่มที่ 1)
+  try {
+    const data = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === userId) {
+        return i + 1; // คืนค่าเป็นเลขแถว (1-based)
+      }
     }
+    
+    return 0; // ไม่พบ
+  } catch (error) {
+    Logger.log(`❌ Error finding user row: ${error.message}`);
+    return 0;
   }
-  
-  return 0; // ไม่พบ
+}
+
+/**
+ * Find Row By Value
+ * หาแถวที่มีค่าตรงกับที่ต้องการในคอลัมน์ที่ระบุ
+ */
+function findRowByValue(sheet, column, value) {
+  try {
+    if (!sheet || sheet.getLastRow() < 2) return 0;
+    
+    const data = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][column - 1] === value) {
+        return i + 1; // คืนค่าเป็นเลขแถว (1-based)
+      }
+    }
+    
+    return 0; // ไม่พบ
+    
+  } catch (error) {
+    Logger.log(`❌ Error finding row: ${error.message}`);
+    return 0;
+  }
+}
+
+/**
+ * Update Row
+ * อัพเดทข้อมูลในแถวที่ระบุ
+ */
+function updateRow(sheet, rowNum, rowData) {
+  try {
+    if (!sheet || rowNum < 1) return false;
+    
+    sheet.getRange(rowNum, 1, 1, rowData.length).setValues([rowData]);
+    return true;
+    
+  } catch (error) {
+    Logger.log(`❌ Error updating row: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Get Sheet Data As Array
+ * ดึงข้อมูลจาก Sheet เป็น Array of Objects
+ */
+function getSheetDataAsArray(sheetName) {
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_CONFIG.SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(sheetName);
+    
+    if (!sheet || sheet.getLastRow() < 2) {
+      return [];
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    const headers = data.shift();
+    
+    return data.map(row => {
+      let obj = {};
+      headers.forEach((header, i) => {
+        obj[header] = row[i];
+      });
+      return obj;
+    });
+    
+  } catch (error) {
+    Logger.log(`❌ Error getting sheet data: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Is Duplicate Date
+ * ตรวจสอบว่ามีวันที่นี้ในระบบแล้วหรือไม่ (ใช้ใน InsightService)
+ */
+function isDuplicateDate(sheet, date) {
+  try {
+    if (!sheet || sheet.getLastRow() < 2) return false;
+    
+    const data = sheet.getDataRange().getValues();
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+    
+    for (let i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      
+      const rowDate = new Date(data[i][0]);
+      rowDate.setHours(0, 0, 0, 0);
+      
+      if (rowDate.getTime() === targetDate.getTime()) {
+        return true;
+      }
+    }
+    
+    return false;
+    
+  } catch (error) {
+    Logger.log(`❌ Error checking duplicate date: ${error.message}`);
+    return false;
+  }
 }

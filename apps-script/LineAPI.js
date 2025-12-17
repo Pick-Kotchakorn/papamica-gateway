@@ -247,6 +247,10 @@ function markAsRead(readToken) {
 // 💡 NEW FUNCTION: Get Media Content (สำหรับ Oil Report)
 // ========================================
 
+// ========================================
+// 📱 LINEAPI.GS - แก้ไขเฉพาะส่วน getMediaContent
+// ========================================
+
 /**
  * Get Media Content (Image/Video/Audio) from LINE
  * ดึงเนื้อหาสื่อ (เช่น รูปบิล) บันทึกใน Google Drive และส่งคืน URL
@@ -254,7 +258,6 @@ function markAsRead(readToken) {
  * @return {string} URL ของรูปภาพที่ถูกบันทึกใน Google Drive
  */
 function getMediaContent(messageId) {
-  // 💡 Note: ฟังก์ชันนี้ต้องเปิดใช้งาน Drive API ใน GAS Services
   try {
     // ใช้ retry ครอบ Logic ทั้งหมดเพื่อจัดการความล้มเหลวของ Network I/O
     return retry(() => {
@@ -274,26 +277,36 @@ function getMediaContent(messageId) {
 
         if (statusCode !== 200) {
           Logger.log(`❌ Failed to get media content: ${statusCode} - ${response.getContentText()}`);
-          // Throw error เพื่อให้ retry function ทำงานซ้ำ
           throw new Error(`LINE Media API error: ${statusCode}`);
         }
 
         // 1. Get Blob
         const blob = response.getBlob();
-        const fileName = `oil_report_bill_${messageId}_${new Date().getTime()}.jpg`;
+        const timestamp = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyyMMdd_HHmmss');
+        const fileName = `line_image_${messageId}_${timestamp}.jpg`;
         blob.setName(fileName);
         
-        // 2. Determine Folder ID
-        const FOLDER_ID = PROPERTIES.getProperty('OIL_REPORT_DRIVE_FOLDER_ID') || 'root'; 
+        // 2. Determine Folder ID (ลำดับความสำคัญ)
+        let FOLDER_ID = PROPERTIES.getProperty('OIL_REPORT_DRIVE_FOLDER_ID');
+        
+        // Fallback: ถ้าไม่มีใน Properties ให้ใช้ค่า default
+        if (!FOLDER_ID || FOLDER_ID === '') {
+          FOLDER_ID = '10Zq_oPIBIUL491F88vGZ5MA7FPvuEJZB'; // Default Folder
+          Logger.log(`⚠️ Using default folder ID: ${FOLDER_ID}`);
+        } else {
+          Logger.log(`✅ Using folder ID from Properties: ${FOLDER_ID}`);
+        }
 
         // 3. Save to Google Drive
         const folder = DriveApp.getFolderById(FOLDER_ID);
         const file = folder.createFile(blob);
         
+        // 4. Set sharing permissions
         file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
-        Logger.log(`✅ Saved image to Drive: ${file.getUrl()}`);
-        return file.getUrl();
+        
+        const fileUrl = file.getUrl();
+        Logger.log(`✅ Saved image to Drive: ${fileUrl}`);
+        return fileUrl;
 
     }, 3, 2000); // Retry 3 ครั้ง, หน่วงเวลา 2 วินาที
 
