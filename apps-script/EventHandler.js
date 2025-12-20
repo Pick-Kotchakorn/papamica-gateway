@@ -190,24 +190,26 @@ function handleTextMessage(event) {
 /**
  * 3. Handle Oil Report Image
  * จัดการรูปภาพสลิป บันทึกลง Drive และ Sheet
+ * (เวอร์ชันปรับปรุง: เปลี่ยนไปใช้ getMediaContent เพื่อความปลอดภัยและ Retry)
  */
 function handleOilReportImage(event) {
   const userId = event.source.userId;
   const messageId = event.message.id;
   
-  // ตรวจสอบว่า User คนนี้กำลังทำรายการค้างอยู่ที่ขั้นตอน 'รอรูป' หรือไม่?
+  // ตรวจสอบสถานะการทำรายการของ User
   const state = getReportState(userId);
 
   if (state && state.step === 'AWAITING_IMAGE') {
       try {
         pushSimpleMessage(userId, '⏳ กำลังบันทึกข้อมูลและอัปโหลดรูปภาพ...');
 
-        // 1. บันทึกรูปภาพลง Drive
-        const timestamp = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyyMMdd_HHmm');
-        const fileName = `SLIP_${state.data.branch}_${timestamp}`;
-        const driveImageUrl = saveImageToDrive(messageId, fileName);
+        // ✅ แก้ไข: เปลี่ยนจาก saveImageToDrive เป็น getMediaContent 
+        // เพื่อใช้ retry() logic และการจัดการ Error ที่ดีกว่าใน LineAPI.gs
+        const timestampStr = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyyMMdd_HHmm');
+        const fileName = `SLIP_${state.data.branch}_${timestampStr}.jpg`;
+        const driveImageUrl = getMediaContent(messageId, fileName); 
 
-        // 2. เตรียมข้อมูลบันทึกลง Sheet
+        // 2. เตรียมข้อมูลสำหรับบันทึกลง Sheet
         const finalData = {
           userId: userId,
           branch: state.data.branch,
@@ -216,15 +218,15 @@ function handleOilReportImage(event) {
           type: 'deposit'
         };
 
-        // 3. บันทึกและคำนวณยอดสะสม
+        // 3. บันทึกและคำนวณยอดสะสมผ่าน SheetService
         const summary = saveOilReport(finalData);
 
-        // 4. Helper Format Number
+        // 4. ฟังก์ชันจัดการรูปแบบตัวเลขสำหรับข้อความตอบกลับ
         const formatNum = (num) => {
              return Number(num).toLocaleString('th-TH', {minimumFractionDigits: 2});
         };
 
-        // 5. แจ้งผลลัพธ์
+        // 5. สร้างข้อความตอบกลับสรุปผลการรายงาน
         const replyText = `✅ บันทึกสำเร็จ!\n\n` +
                           `📍 สาขา: ${summary.branch}\n` +
                           `💰 ยอดครั้งนี้: ${formatNum(summary.latest)} บ.\n` +
@@ -234,7 +236,7 @@ function handleOilReportImage(event) {
         
         pushSimpleMessage(userId, replyText);
         
-        // 6. ล้างสถานะ & Logging
+        // 6. ล้างสถานะรายการและบันทึกการโต้ตอบ
         clearReportState(userId);
         updateFollowerInteraction(userId);
 
@@ -242,9 +244,9 @@ function handleOilReportImage(event) {
         Logger.log('Error processing image: ' + error.message);
         pushSimpleMessage(userId, '❌ เกิดข้อผิดพลาด: ' + error.message);
       }
-      return true; // บอกว่า Process แล้ว
+      return true; // ยืนยันว่าประมวลผล Event นี้แล้ว
   }
-  return false; // ไม่ใช่ Flow รายงาน
+  return false; // ไม่ใช่ Flow ของการรายงานน้ำมัน
 }
 
 /**

@@ -252,67 +252,38 @@ function markAsRead(readToken) {
 // ========================================
 
 /**
- * Get Media Content (Image/Video/Audio) from LINE
- * ดึงเนื้อหาสื่อ (เช่น รูปบิล) บันทึกใน Google Drive และส่งคืน URL
- * @param {string} messageId - ID ของ message ที่ต้องการดึงเนื้อหา
- * @return {string} URL ของรูปภาพที่ถูกบันทึกใน Google Drive
+ * Get Media Content from LINE
+ * ดึงรูปภาพ บันทึกใน Google Drive และส่งคืน URL
  */
-function getMediaContent(messageId) {
+function getMediaContent(messageId, customFileName = null) {
   try {
-    // ใช้ retry ครอบ Logic ทั้งหมดเพื่อจัดการความล้มเหลวของ Network I/O
     return retry(() => {
-        Logger.log(`🔎 Attempting to fetch media content for ID: ${messageId}`);
-
+        Logger.log(`🔎 Fetching media content for ID: ${messageId}`);
         const url = `https://api-data.line.me/v2/bot/message/${messageId}/content`;
         const options = {
           method: 'get',
-          headers: {
-            'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN,
-          },
+          headers: { 'Authorization': 'Bearer ' + LINE_CONFIG.CHANNEL_ACCESS_TOKEN },
           muteHttpExceptions: true,
         };
 
         const response = UrlFetchApp.fetch(url, options);
-        const statusCode = response.getResponseCode();
+        if (response.getResponseCode() !== 200) throw new Error(`LINE Media API error: ${response.getResponseCode()}`);
 
-        if (statusCode !== 200) {
-          Logger.log(`❌ Failed to get media content: ${statusCode} - ${response.getContentText()}`);
-          throw new Error(`LINE Media API error: ${statusCode}`);
-        }
-
-        // 1. Get Blob
         const blob = response.getBlob();
+        // ใช้ชื่อไฟล์ที่กำหนด หรือสร้างใหม่ตาม format
         const timestamp = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyyMMdd_HHmmss');
-        const fileName = `line_image_${messageId}_${timestamp}.jpg`;
+        const fileName = customFileName || `line_image_${messageId}_${timestamp}.jpg`;
         blob.setName(fileName);
         
-        // 2. Determine Folder ID (ลำดับความสำคัญ)
-        let FOLDER_ID = PROPERTIES.getProperty('OIL_REPORT_DRIVE_FOLDER_ID');
-        
-        // Fallback: ถ้าไม่มีใน Properties ให้ใช้ค่า default
-        if (!FOLDER_ID || FOLDER_ID === '') {
-          FOLDER_ID = '10Zq_oPIBIUL491F88vGZ5MA7FPvuEJZB'; // Default Folder
-          Logger.log(`⚠️ Using default folder ID: ${FOLDER_ID}`);
-        } else {
-          Logger.log(`✅ Using folder ID from Properties: ${FOLDER_ID}`);
-        }
-
-        // 3. Save to Google Drive
+        let FOLDER_ID = PROPERTIES.getProperty('OIL_REPORT_DRIVE_FOLDER_ID') || '10Zq_oPIBIUL491F88vGZ5MA7FPvuEJZB';
         const folder = DriveApp.getFolderById(FOLDER_ID);
         const file = folder.createFile(blob);
-        
-        // 4. Set sharing permissions
         file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         
-        const fileUrl = file.getUrl();
-        Logger.log(`✅ Saved image to Drive: ${fileUrl}`);
-        return fileUrl;
-
-    }, 3, 2000); // Retry 3 ครั้ง, หน่วงเวลา 2 วินาที
-
+        return file.getUrl();
+    }, 3, 2000);
   } catch (error) {
-    Logger.log(`❌ Fatal Error in getMediaContent after retries: ${error.message}`);
-    // ส่ง Error กลับไปเพื่อให้ Flow ใน EventHandler หยุดทำงาน
+    Logger.log(`❌ Error in getMediaContent: ${error.message}`);
     throw error;
   }
 }

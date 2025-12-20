@@ -39,115 +39,92 @@ function getOrCreateSheet(sheetName, headers = null) {
 /**
  * Save Oil Report
  * บันทึกรายงานน้ำมันลง Sheet พร้อมคำนวณยอดสะสม
+ * (เวอร์ชันปรับปรุง: เพิ่ม Flush และจัดการ Month Key ให้แม่นยำ)
  */
 function saveOilReport(data) {
   try {
-    Logger.log('💾 Starting saveOilReport...');
-    Logger.log(`Data received: ${JSON.stringify(data)}`);
-    
-    // 1. เปิด Spreadsheet และ Sheet
     const ss = SpreadsheetApp.openById(SHEET_CONFIG.SPREADSHEET_ID);
-    if (!ss) {
-      throw new Error('Cannot open spreadsheet. Check SPREADSHEET_ID in Config.');
-    }
-    
     const sheetName = SHEET_CONFIG.SHEETS.OIL_REPORTS || 'Oil_Reports';
     let sheet = ss.getSheetByName(sheetName);
     
-    // 2. สร้าง Sheet ถ้ายังไม่มี
+    const configHeaders = SHEET_CONFIG.COLUMNS.OIL_REPORTS; 
+    
     if (!sheet) {
-      Logger.log(`Creating new sheet: ${sheetName}`);
       sheet = ss.insertSheet(sheetName);
+      sheet.appendRow(configHeaders);
+      sheet.getRange(1, 1, 1, configHeaders.length).setFontWeight('bold').setBackground('#4285f4').setFontColor('#ffffff');
+    } else {
+      const currentHeaders = sheet.getRange(1, 1, 1, configHeaders.length).getValues()[0];
+      const isHeaderMatch = currentHeaders.every((h, i) => String(h).toLowerCase() === configHeaders[i].toLowerCase());
       
-      // สร้าง Header
-      const headers = ['Timestamp', 'User ID', 'Branch', 'Amount', 'Type', 'Image URL', 'Month Key'];
-      sheet.appendRow(headers);
-      
-      // จัดรูปแบบ Header
-      const headerRange = sheet.getRange(1, 1, 1, headers.length);
-      headerRange.setFontWeight('bold');
-      headerRange.setBackground('#4285f4');
-      headerRange.setFontColor('#ffffff');
+      if (!isHeaderMatch) {
+        Logger.log('⚠️ Header mismatch detected. Updating headers to match Config...');
+        sheet.getRange(1, 1, 1, configHeaders.length).setValues([configHeaders]);
+      }
     }
     
-    // 3. เตรียมข้อมูลสำหรับบันทึก
     const timestamp = new Date();
     const monthKey = Utilities.formatDate(timestamp, 'Asia/Bangkok', 'yyyy-MM');
     
-    const rowData = [
-      timestamp,
-      data.userId,
-      data.branch,
-      data.amount,
-      data.type || 'deposit',
-      data.imageUrl,
-      monthKey
-    ];
+    // เตรียมข้อมูล: timestamp, branch, amount, type, image_url, staff_user_id, month_key
+    const rowData = [timestamp, data.branch, data.amount, data.type || 'deposit', data.imageUrl, data.userId, monthKey];
     
-    Logger.log(`Appending row: ${JSON.stringify(rowData)}`);
-    
-    // 4. บันทึกข้อมูล
     sheet.appendRow(rowData);
-    Logger.log('✅ Row appended successfully');
     
-    // 5. คำนวณยอดสะสม
-    Logger.log('Calculating accumulated amount...');
+    // 💡 เพิ่มการตั้งค่า Format ของคอลัมน์ Month Key (คอลัมน์ที่ 7) ให้เป็น Plain Text เพื่อป้องกัน Sheets แปลงเป็น Date
+    sheet.getRange(sheet.getLastRow(), 7).setNumberFormat('@');
+    
+    // 💡 สำคัญ: สั่งให้ Google Sheets อัปเดตข้อมูลทันที
+    SpreadsheetApp.flush();
     
     const allData = sheet.getDataRange().getValues();
-    const headers = allData.shift(); // ลบ header row
+    const headers = allData.shift(); 
     
-    // แปลงเป็น Object Array
     const reportData = allData.map(row => {
       let obj = {};
-      headers.forEach((header, i) => {
-        const key = header.toLowerCase().replace(/ /g, '_');
-        obj[key] = row[i];
+      headers.forEach((h, i) => {
+        if (h) {
+          const key = String(h).toLowerCase().trim().replace(/\s+/g, '_');
+          obj[key] = row[i];
+        }
       });
       return obj;
     });
     
-    // Filter ข้อมูลของสาขาและเดือนปัจจุบัน
+    // กรองข้อมูลด้วย Logic ที่รองรับทั้ง String และ Date Object
     const currentMonthData = reportData.filter(row => {
-      const rowBranch = String(row['branch'] || '').trim();
-      const rowMonthKey = String(row['month_key'] || '').trim();
-      const dataBranch = String(data.branch || '').trim();
+      // เปรียบเทียบสาขา (แบบไม่สน Case)
+      const branchMatch = String(row['branch'] || '').trim().toLowerCase() === String(data.branch).trim().toLowerCase();
+
+      // เปรียบเทียบ Month Key (จัดการกรณี Sheets แปลงเป็น Date Object)
+      let rowMonthKey = row['month_key'];
+      if (rowMonthKey instanceof Date) {
+        rowMonthKey = Utilities.formatDate(rowMonthKey, 'Asia/Bangkok', 'yyyy-MM');
+      } else {
+        rowMonthKey = String(rowMonthKey || '').trim();
+      }
       
-      return rowBranch === dataBranch && rowMonthKey === monthKey;
+      return branchMatch && (rowMonthKey === monthKey);
     });
     
-    Logger.log(`Found ${currentMonthData.length} records for ${data.branch} in ${monthKey}`);
-    
-    // คำนวณยอดรวม
     const totalAccumulated = currentMonthData.reduce((sum, row) => {
-      const amount = safeParseFloat(row['amount']); 
-      const type = String(row['type'] || 'deposit').toLowerCase(); 
-      return type === 'deposit' ? sum + amount : sum - amount;
+      const amt = safeParseFloat(row['amount']); 
+      const type = String(row['type'] || 'deposit').toLowerCase();
+      return type === 'deposit' ? sum + amt : sum - amt;
     }, 0);
     
-    Logger.log(`Total accumulated: ${totalAccumulated}`);
-    
-    // 6. เตรียมผลลัพธ์
-    const goal = SYSTEM_CONFIG.DEFAULTS.OIL_REPORT_GOAL || 10000;
-    
-    const result = {
+    return {
       branch: data.branch,
       latest: data.amount,
       accumulated: totalAccumulated,
-      goal: goal
+      goal: SYSTEM_CONFIG.DEFAULTS.OIL_REPORT_GOAL || 10000
     };
-    
-    Logger.log('✅ saveOilReport completed successfully');
-    Logger.log(`Result: ${JSON.stringify(result)}`);
-    
-    return result;
     
   } catch (error) {
     Logger.log(`❌ Error in saveOilReport: ${error.message}`);
-    Logger.log(`Stack trace: ${error.stack}`);
-    throw new Error(`Sheet Save Error: ${error.message}`);
+    throw error;
   }
 }
-
 
 // ========================================
 // 👥 FOLLOWER & CONVERSATION FUNCTIONS
