@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body { 
+        font-family: 'Kanit', sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px 15px;
+      }
+      
+      .main-container {
+        max-width: 480px;
+        margin: 0 auto;
+      }
+      
+      .card-container { 
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        overflow: hidden;
+      }
+      
+      .header-section {
+        background: linear-gradient(135deg, #06C755 0%, #05a847 100%);
+        padding: 30px 20px;
+        text-align: center;
+      }
+      
+      .header-icon {
+        font-size: 3em;
+        margin-bottom: 10px;
+      }
+      
+      .header-title {
+        color: white;
+        font-size: 1.7em;
+        font-weight: 700;
+        margin: 0;
+      }
+      
+      .header-subtitle {
+        color: rgba(255,255,255,0.95);
+        font-size: 0.9em;
+        margin-top: 5px;
+        font-weight: 300;
+      }
+      
+      .form-section {
+        padding: 25px 20px 30px;
+      }
+      
+      .form-group {
+        margin-bottom: 22px;
+      }
+      
+      .form-label {
+        font-weight: 600;
+        color: #2d3748;
+        margin-bottom: 8px;
+        display: block;
+        font-size: 1em;
+      }
+      
+      .label-icon {
+        font-size: 1.2em;
+        margin-right: 6px;
+      }
+      
+      .form-select,
+      .form-control {
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 13px 15px;
+        font-size: 1em;
+        width: 100%;
+        background-color: #f8fafc;
+        font-family: 'Kanit', sans-serif;
+        transition: all 0.2s;
+      }
+      
+      .form-select:focus,
+      .form-control:focus {
+        border-color: #06C755;
+        background-color: white;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(6, 199, 85, 0.1);
+      }
+      
+      .file-input-wrapper {
+        position: relative;
+      }
+      
+      .file-input-wrapper input[type=file] {
+        position: absolute;
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+        z-index: 2;
+      }
+      
+      .file-input-label {
+        display: block;
+        padding: 30px 20px;
+        background: #f8fafc;
+        border: 2px dashed #cbd5e0;
+        border-radius: 12px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      
+      .file-input-wrapper:hover .file-input-label {
+        border-color: #06C755;
+        background: #f0fdf4;
+      }
+      
+      .file-icon {
+        font-size: 2.5em;
+        margin-bottom: 8px;
+        display: block;
+      }
+      
+      .file-text {
+        color: #64748b;
+        font-size: 0.95em;
+      }
+      
+      .file-selected {
+        color: #06C755;
+        font-weight: 600;
+        margin-top: 8px;
+        font-size: 0.9em;
+        display: none;
+      }
+      
+      .file-selected.show {
+        display: block;
+      }
+      
+      .form-text {
+        color: #94a3b8;
+        font-size: 0.85em;
+        margin-top: 6px;
+        display: block;
+      }
+      
+      .btn-submit {
+        width: 100%;
+        padding: 15px;
+        font-size: 1.1em;
+        font-weight: 600;
+        border: none;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #06C755 0%, #05a847 100%);
+        color: white;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 4px 15px rgba(6, 199, 85, 0.3);
+        margin-top: 5px;
+        font-family: 'Kanit', sans-serif;
+      }
+      
+      .btn-submit:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(6, 199, 85, 0.4);
+      }
+      
+      .btn-submit:active:not(:disabled) {
+        transform: translateY(0);
+      }
+      
+      .btn-submit:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      
+      .loading-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.95);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+      
+      .loading-overlay.show {
+        display: flex;
+      }
+      
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #06C755;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      .loading-text {
+        margin-top: 15px;
+        font-size: 1.1em;
+        font-weight: 600;
+        color: #06C755;
+      }
+      
+      @media (max-width: 576px) {
+        body {
+          padding: 15px 10px;
+        }
+        
+        .header-icon {
+          font-size: 2.5em;
+        }
+        
+        .header-title {
+          font-size: 1.5em;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="main-container">
+      <div class="card-container">
+        <div class="header-section">
+          <div class="header-icon">⛽</div>
+          <h1 class="header-title">รายงานยอดน้ำมัน</h1>
+          <p class="header-subtitle">กรุณากรอกข้อมูลให้ครบถ้วน</p>
+        </div>
+        
+        <div class="form-section">
+          <form id="oilForm">
+            <input type="hidden" id="userId" name="userId" value="<?= userId ?>">
+
+            <div class="form-group">
+              <label class="form-label">
+                <span class="label-icon">📍</span>สาขา
+              </label>
+              <select class="form-select" name="branch" required>
+                <option value="" selected disabled>กรุณาเลือกสาขา</option>
+                <option value="EMQ">EmQuartier</option>
+                <option value="ONB">One Bangkok</option>
+                <option value="KSQ">KingsQuare</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">
+                <span class="label-icon">💰</span>จำนวนเงิน
+              </label>
+              <input 
+                type="number" 
+                step="0.01" 
+                class="form-control" 
+                name="amount" 
+                placeholder="กรอกจำนวนเงิน เช่น 1500.50" 
+                required
+              >
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">
+                <span class="label-icon">📸</span>อัปโหลดรูปภาพสลิป
+              </label>
+              <div class="file-input-wrapper">
+                <input 
+                  type="file" 
+                  name="imageFile" 
+                  id="imageFile" 
+                  accept="image/*" 
+                  required
+                >
+                <label class="file-input-label" id="fileLabel">
+                  <span class="file-icon">📷</span>
+                  <div class="file-text">คลิกเพื่อเลือกรูปภาพ</div>
+                  <div class="file-selected" id="fileName"></div>
+                </label>
+              </div>
+              <small class="form-text">รองรับไฟล์ .jpg, .png (ขนาดไม่เกิน 5MB)</small>
+            </div>
+            
+            <button type="submit" id="submitBtn" class="btn-submit">
+              ✓ ยืนยันการรายงาน
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="spinner"></div>
+      <div class="loading-text">กำลังบันทึกข้อมูล...</div>
+    </div>
+
+    <script>
+      // Wait for DOM to be ready
+      document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('oilForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const imageInput = document.getElementById('imageFile');
+        const fileName = document.getElementById('fileName');
+        const fileLabel = document.getElementById('fileLabel');
+
+        // Handle file input
+        imageInput.addEventListener('change', function(e) {
+          if (e.target.files && e.target.files.length > 0) {
+            const file = e.target.files[0];
+            fileName.textContent = '✓ ' + file.name;
+            fileName.classList.add('show');
+            fileLabel.style.borderColor = '#06C755';
+            fileLabel.style.background = '#f0fdf4';
+          }
+        });
+
+        // Handle form submission
+        form.addEventListener('submit', function(e) {
+          e.preventDefault();
+          
+          // Show loading
+          submitBtn.disabled = true;
+          loadingOverlay.classList.add('show');
+
+          const file = imageInput.files[0];
+          
+          if (!file) {
+            alert('กรุณาเลือกรูปภาพ');
+            submitBtn.disabled = false;
+            loadingOverlay.classList.remove('show');
+            return;
+          }
+
+          const reader = new FileReader();
+          
+          reader.onload = function(e) {
+            const fileData = {
+              base64: e.target.result.split(',')[1],
+              mimeType: file.type,
+              fileName: file.name
+            };
+
+            const formData = {
+              userId: document.getElementById('userId').value, 
+              branch: form.branch.value,
+              amount: form.amount.value,
+              imageData: fileData
+            };
+
+            // Submit to Google Apps Script
+            google.script.run
+              .withSuccessHandler(function(response) {
+                loadingOverlay.classList.remove('show');
+                alert('✅ บันทึกข้อมูลสำเร็จ!');
+                
+                // Try to close window
+                if (typeof liff !== 'undefined') {
+                  liff.closeWindow();
+                } else {
+                  window.close();
+                }
+                
+                // Reset form
+                form.reset();
+                fileName.classList.remove('show');
+                fileName.textContent = '';
+                fileLabel.style.borderColor = '#cbd5e0';
+                fileLabel.style.background = '#f8fafc';
+                submitBtn.disabled = false;
+              })
+              .withFailureHandler(function(error) {
+                loadingOverlay.classList.remove('show');
+                alert('❌ เกิดข้อผิดพลาด: ' + error.message);
+                submitBtn.disabled = false;
+              })
+              .processFormSubmission(formData);
+          };
+          
+          reader.onerror = function() {
+            alert('❌ ไม่สามารถอ่านไฟล์ได้');
+            submitBtn.disabled = false;
+            loadingOverlay.classList.remove('show');
+          };
+          
+          reader.readAsDataURL(file);
+        });
+      });
+    </script>
+  </body>
+</html>

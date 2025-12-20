@@ -77,74 +77,65 @@ function handleTextMessage(event) {
       const parameters = dfResponse.parameters;
 
       // ====================================================
-      // 🟢 CASE 1: เริ่มต้น (เรียกเมนู Flex Message)
+      // 🟢 CASE 1: เริ่มต้น (เรียกเมนู Flex Message เปิดฟอร์ม)
       // Intent: oil-report-start
       // ====================================================
       if (intentName === 'oil-report-start') {
-        sendLineMessages(userId, dfResponse, replyToken); // ✅ ส่ง replyToken
-        intent = intentName;
-        aiResponse = '[Flex Message: Branch Selection Menu]';
-      }
-
-      // ====================================================
-      // 🟢 CASE 2: เลือกสาขา (รับค่าจาก Entity @branch)
-      // Intent: oil-report-select-branch
-      // ====================================================
-      else if (intentName === 'oil-report-select-branch' && parameters.branch) {
-        const branchCode = parameters.branch;
-        Logger.log(`📍 Selected Branch: ${branchCode}`);
-
-        // ตั้งค่าสถานะ: รอรับยอดเงิน
-        setReportState(userId, 'AWAITING_AMOUNT', { branch: branchCode });
         
-        sendLineMessages(userId, dfResponse, replyToken); // ✅ ส่ง replyToken
-        intent = intentName;
-        aiResponse = `[Branch Selected: ${branchCode}]`;
-      }
-
-      // ====================================================
-      // 🟢 CASE 3: ระบุยอดเงิน (รับตัวเลข) - (โค้ดที่ถูกปรับปรุง)
-      // Intent: Oil Report - Amount
-      // ====================================================
-      else if (intentName === 'Oil Report - Amount' && parameters.amount) {
-         const currentState = getReportState(userId);
-         const rawAmount = parameters.amount;
-         const amount = parseFloat(rawAmount); // ลองแปลงค่าเป็นตัวเลข
-
-         if (currentState && currentState.step === 'AWAITING_AMOUNT') {
-            
-            // 1. ตรวจสอบความถูกต้องของตัวเลข (ต้องเป็นตัวเลขที่ถูกต้องและมากกว่า 0)
-            if (isNaN(amount) || amount <= 0) {
-                Logger.log(`⚠️ Invalid amount received (not positive number): ${rawAmount}. State kept at AWAITING_AMOUNT.`);
-                
-                // ส่งข้อความตอบกลับจาก Dialogflow (DF ควรตั้งค่าให้ตอบกลับข้อความเตือนว่ายอดเงินไม่ถูกต้อง)
-                if (dfResponse.messages) {
-                    sendLineMessages(userId, dfResponse, replyToken); 
+        // 📌 URL ของ Web App (แนบ userId ไปด้วย)
+        const webAppUrl = 'https://script.google.com/macros/s/AKfycbzSksjKBT_LoifYrKdtuBZ0b8q-gVThIJ2v7M286N98sYdegrMIMDQM8oudXeobrKQL/exec';
+        const formUrl = `${webAppUrl}?userId=${userId}`;
+        
+        const flexMessage = {
+          "type": "flex",
+          "altText": "เปิดฟอร์มรายงานน้ำมัน",
+          "contents": {
+            "type": "bubble",
+            "body": {
+              "type": "box",
+              "layout": "vertical",
+              "contents": [
+                { "type": "text", "text": "📝 รายงานยอดน้ำมัน", "weight": "bold", "size": "xl", "color": "#1DB446" },
+                { "type": "text", "text": "กรุณากดปุ่มด้านล่างเพื่อกรอกข้อมูลและแนบสลิป", "margin": "md", "color": "#666666", "wrap": true }
+              ]
+            },
+            "footer": {
+              "type": "box",
+              "layout": "vertical",
+              "contents": [
+                {
+                  "type": "button",
+                  "action": {
+                    "type": "uri",
+                    "label": "เปิดฟอร์มกรอกข้อมูล",
+                    "uri": formUrl
+                  },
+                  "style": "primary",
+                  "color": "#06C755"
                 }
-                intent = 'Oil Report - Invalid Amount';
-                aiResponse = '[DF Response: Invalid Amount Alert]';
-
-                // **สำคัญ: ไม่เปลี่ยนสถานะ (ผู้ใช้ต้องป้อนใหม่)**
-                
-            } else {
-                // 2. ยอดเงินถูกต้อง: อัปเดตสถานะเป็นรอรูป พร้อมเก็บยอดเงิน
-                setReportState(userId, 'AWAITING_IMAGE', { ...currentState.data, amount: amount });
-                
-                sendLineMessages(userId, dfResponse, replyToken); // ✅ ส่ง replyToken (ข้อความจาก DF ควรบอกให้ส่งรูป)
-                intent = intentName;
-                aiResponse = `[Amount Received & State AWAITING_IMAGE: ${amount}]`;
+              ]
             }
-         } else {
-             // 3. กรณีพิมพ์ตัวเลขแต่ไม่ได้อยู่ใน Flow รายงาน (currentState ไม่ใช่ AWAITING_AMOUNT)
-             Logger.log('ℹ️ Amount received outside of AWAITING_AMOUNT state. Sending DF response.');
-             if (dfResponse.messages) {
-               // ส่งข้อความตอบกลับจาก Dialogflow (DF ควรมี Fallback หรือข้อความทั่วไป)
-               sendLineMessages(userId, dfResponse, replyToken);
-             }
-             intent = 'Oil Report - Out of Flow (Amount)';
-             aiResponse = '[DF Response: Out of Flow]';
-         }
+          }
+        };
+
+        sendLineMessages(userId, { messages: [flexMessage] }, replyToken);
+        intent = intentName;
+        aiResponse = '[Sent Flex Message: Open Form]';
       }
+
+      // ====================================================
+      // 🚫 CASE 2 & 3: ปิดการทำงาน Flow แชทแบบเก่า (Comment Out)
+      // เพื่อบังคับให้ใช้ฟอร์ม และป้องกัน Intent ชนกัน
+      // ====================================================
+      
+      /*
+      else if (intentName === 'oil-report-select-branch' && parameters.branch) {
+         // (Code เดิมถูกปิดการทำงาน)
+      }
+      else if (intentName === 'Oil Report - Amount' && parameters.amount) {
+         // (Code เดิมถูกปิดการทำงาน)
+      }
+      */
       
       // ====================================================
       // 🟢 Default Case: สนทนาทั่วไป
@@ -190,7 +181,7 @@ function handleTextMessage(event) {
 /**
  * 3. Handle Oil Report Image
  * จัดการรูปภาพสลิป บันทึกลง Drive และ Sheet
- * (เวอร์ชันปรับปรุง: เปลี่ยนไปใช้ getMediaContent เพื่อความปลอดภัยและ Retry)
+ * (ยังคงไว้ แต่จะไม่ถูกเรียกใช้ถ้าไม่มีการ Set State AWAITING_IMAGE)
  */
 function handleOilReportImage(event) {
   const userId = event.source.userId;
@@ -203,8 +194,6 @@ function handleOilReportImage(event) {
       try {
         pushSimpleMessage(userId, '⏳ กำลังบันทึกข้อมูลและอัปโหลดรูปภาพ...');
 
-        // ✅ แก้ไข: เปลี่ยนจาก saveImageToDrive เป็น getMediaContent 
-        // เพื่อใช้ retry() logic และการจัดการ Error ที่ดีกว่าใน LineAPI.gs
         const timestampStr = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyyMMdd_HHmm');
         const fileName = `SLIP_${state.data.branch}_${timestampStr}.jpg`;
         const driveImageUrl = getMediaContent(messageId, fileName); 

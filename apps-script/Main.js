@@ -473,3 +473,51 @@ function testOilReportFlow() {
   Logger.log('=' .repeat(60));
   Logger.log('✅ Test completed!');
 }
+
+/**
+ * แสดงหน้าเว็บฟอร์มเมื่อมีการเปิดลิงก์
+ */
+function doGet(e) {
+  const template = HtmlService.createTemplateFromFile('Form');
+  // รับ userId จาก URL parameter (ถ้ามี)
+  template.userId = e.parameter.userId || ''; 
+  
+  return template.evaluate()
+    .setTitle('รายงานยอดน้ำมัน')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/**
+ * รับข้อมูลจาก HTML Form และบันทึกลง Sheet
+ */
+function processFormSubmission(formData) {
+  try {
+    // 1. จัดการรูปภาพ (บันทึกลง Drive)
+    const blob = Utilities.newBlob(
+      Utilities.base64Decode(formData.imageData.base64),
+      formData.imageData.mimeType,
+      formData.imageData.fileName
+    );
+    
+    // ใส่ Folder ID ของคุณ (ถูกต้องแล้วครับ)
+    const folder = DriveApp.getFolderById("10Zq_oPIBIUL491F88vGZ5MA7FPvuEJZB");
+    const file = folder.createFile(blob);
+    const driveImageUrl = file.getUrl();
+
+    // 2. บันทึกลง Sheet
+    const finalData = {
+      userId: formData.userId || 'Anonymous', // ✅ รับค่า userId มาใส่ตรงนี้
+      branch: formData.branch,
+      amount: parseFloat(formData.amount),
+      imageUrl: driveImageUrl,
+      type: 'deposit'
+    };
+
+    saveOilReport(finalData); 
+    
+    return { status: 'success' };
+  } catch (error) {
+    Logger.log('Error processing form: ' + error.message);
+    throw new Error('บันทึกข้อมูลไม่สำเร็จ: ' + error.message);
+  }
+}
