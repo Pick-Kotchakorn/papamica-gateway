@@ -3,6 +3,8 @@
   <head>
     <base target="_top">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" charset="utf-8"></script>
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -14,54 +16,47 @@
       
       body { 
         font-family: 'Kanit', sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #f5f5f5;
         min-height: 100vh;
-        padding: 20px 15px;
+        padding: 0;
       }
       
       .main-container {
         max-width: 480px;
         margin: 0 auto;
-      }
-      
-      .card-container { 
         background: white;
-        border-radius: 20px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-        overflow: hidden;
+        min-height: 100vh;
+        position: relative;
       }
       
+      /* Header - สีดำทอง */
       .header-section {
-        background: linear-gradient(135deg, #06C755 0%, #05a847 100%);
+        background: #1C1C1C;
         padding: 30px 20px;
         text-align: center;
-      }
-      
-      .header-icon {
-        font-size: 3em;
-        margin-bottom: 10px;
+        margin-bottom: 20px;
       }
       
       .header-title {
-        color: white;
-        font-size: 1.7em;
+        color: #E6C27A;
+        font-size: 1.5em;
         font-weight: 700;
-        margin: 0;
+        margin: 10px 0 5px 0;
       }
       
       .header-subtitle {
-        color: rgba(255,255,255,0.95);
-        font-size: 0.9em;
-        margin-top: 5px;
-        font-weight: 300;
+        color: #BFAF7A;
+        font-size: 0.75em;
+        letter-spacing: 1px;
       }
       
+      /* Form Section */
       .form-section {
-        padding: 25px 20px 30px;
+        padding: 0 20px 25px 20px;
       }
       
       .form-group {
-        margin-bottom: 22px;
+        margin-bottom: 20px;
       }
       
       .form-label {
@@ -69,20 +64,19 @@
         color: #2d3748;
         margin-bottom: 8px;
         display: block;
-        font-size: 1em;
+        font-size: 0.95em;
       }
       
       .label-icon {
-        font-size: 1.2em;
         margin-right: 6px;
       }
       
       .form-select,
       .form-control {
         border: 2px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 13px 15px;
-        font-size: 1em;
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-size: 0.95em;
         width: 100%;
         background-color: #f8fafc;
         font-family: 'Kanit', sans-serif;
@@ -91,12 +85,13 @@
       
       .form-select:focus,
       .form-control:focus {
-        border-color: #06C755;
+        border-color: #E6C27A;
         background-color: white;
         outline: none;
-        box-shadow: 0 0 0 3px rgba(6, 199, 85, 0.1);
+        box-shadow: 0 0 0 3px rgba(230, 194, 122, 0.1);
       }
       
+      /* File Input */
       .file-input-wrapper {
         position: relative;
       }
@@ -112,36 +107,36 @@
       
       .file-input-label {
         display: block;
-        padding: 30px 20px;
+        padding: 25px 20px;
         background: #f8fafc;
         border: 2px dashed #cbd5e0;
-        border-radius: 12px;
+        border-radius: 10px;
         text-align: center;
         cursor: pointer;
         transition: all 0.2s;
       }
       
       .file-input-wrapper:hover .file-input-label {
-        border-color: #06C755;
-        background: #f0fdf4;
+        border-color: #E6C27A;
+        background: #fffbf5;
       }
       
       .file-icon {
-        font-size: 2.5em;
+        font-size: 2.2em;
         margin-bottom: 8px;
         display: block;
       }
       
       .file-text {
         color: #64748b;
-        font-size: 0.95em;
+        font-size: 0.9em;
       }
       
       .file-selected {
-        color: #06C755;
+        color: #E6C27A;
         font-weight: 600;
         margin-top: 8px;
-        font-size: 0.9em;
+        font-size: 0.85em;
         display: none;
       }
       
@@ -151,30 +146,45 @@
       
       .form-text {
         color: #94a3b8;
-        font-size: 0.85em;
+        font-size: 0.8em;
         margin-top: 6px;
         display: block;
       }
       
+      /* Submit Button */
       .btn-submit {
         width: 100%;
-        padding: 15px;
-        font-size: 1.1em;
+        padding: 14px;
+        font-size: 1.05em;
         font-weight: 600;
         border: none;
-        border-radius: 12px;
-        background: linear-gradient(135deg, #06C755 0%, #05a847 100%);
+        border-radius: 10px;
+        background: #06C755;
         color: white;
         cursor: pointer;
         transition: all 0.2s;
-        box-shadow: 0 4px 15px rgba(6, 199, 85, 0.3);
+        box-shadow: 0 4px 12px rgba(6, 199, 85, 0.3);
         margin-top: 5px;
         font-family: 'Kanit', sans-serif;
       }
       
       .btn-submit:hover:not(:disabled) {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(6, 199, 85, 0.4);
+        background: #05b34c;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(6, 199, 85, 0.4);
+      }
+      
+      /* Secondary Button for Success Screen */
+      .btn-secondary-custom {
+        background: #f1f5f9;
+        color: #475569;
+        box-shadow: none;
+        border: 1px solid #cbd5e0;
+      }
+      
+      .btn-secondary-custom:hover {
+        background: #e2e8f0;
+        transform: translateY(-1px);
       }
       
       .btn-submit:active:not(:disabled) {
@@ -186,6 +196,7 @@
         cursor: not-allowed;
       }
       
+      /* Loading Overlay */
       .loading-overlay {
         display: none;
         position: fixed;
@@ -205,10 +216,10 @@
       }
       
       .spinner {
-        width: 50px;
-        height: 50px;
+        width: 45px;
+        height: 45px;
         border: 4px solid #f3f3f3;
-        border-top: 4px solid #06C755;
+        border-top: 4px solid #E6C27A;
         border-radius: 50%;
         animation: spin 1s linear infinite;
       }
@@ -220,33 +231,66 @@
       
       .loading-text {
         margin-top: 15px;
-        font-size: 1.1em;
+        font-size: 1em;
         font-weight: 600;
-        color: #06C755;
+        color: #2D3748;
+      }
+
+      /* ✨ Success Screen */
+      .success-screen {
+        display: none;
+        text-align: center;
+        padding: 60px 30px;
+        animation: fadeIn 0.5s ease-out;
+      }
+      
+      .success-icon-box {
+        width: 100px;
+        height: 100px;
+        background: #dcfce7;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 25px;
+      }
+      
+      .success-icon-emoji {
+        font-size: 3.5em;
+      }
+      
+      .success-title {
+        color: #166534;
+        font-size: 1.6em;
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+      
+      .success-desc {
+        color: #64748b;
+        font-size: 1em;
+        margin-bottom: 40px;
+        line-height: 1.6;
+      }
+      
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
       }
       
       @media (max-width: 576px) {
-        body {
-          padding: 15px 10px;
-        }
-        
-        .header-icon {
-          font-size: 2.5em;
-        }
-        
-        .header-title {
-          font-size: 1.5em;
-        }
+        .header-title { font-size: 1.3em; }
+        .form-section { padding: 0 15px 20px 15px; }
       }
     </style>
   </head>
   <body>
     <div class="main-container">
-      <div class="card-container">
+      
+      <div id="contentWrapper">
         <div class="header-section">
-          <div class="header-icon">⛽</div>
-          <h1 class="header-title">รายงานยอดน้ำมัน</h1>
-          <p class="header-subtitle">กรุณากรอกข้อมูลให้ครบถ้วน</p>
+          <h1 class="header-title">รายงานยอดขายน้ำมัน</h1>
+          <p class="header-subtitle">OIL SALES REPORT</p>
         </div>
         
         <div class="form-section">
@@ -265,6 +309,36 @@
               </select>
             </div>
             
+            <div class="form-group">
+              <label class="form-label"><span class="label-icon">📝</span>ประเภทรายการ</label>
+              <div style="display: flex; gap: 10px;">
+                <input type="radio" class="btn-check" name="type" id="typeDeposit" value="deposit" checked style="display:none">
+                <label class="form-control" for="typeDeposit" id="labelDeposit" style="text-align: center; cursor: pointer; border: 2px solid #06C755; background-color: #eafff0; color: #06C755; font-weight: bold;">
+                  📥 ยอดขาย (เข้า)
+                </label>
+                
+                <input type="radio" class="btn-check" name="type" id="typeWithdraw" value="withdraw" style="display:none">
+                <label class="form-control" for="typeWithdraw" id="labelWithdraw" style="text-align: center; cursor: pointer; border: 2px solid #e2e8f0; color: #64748b;">
+                  📤 เบิกจ่าย (ออก)
+                </label>
+              </div>
+            </div>
+
+            <style>
+              input[name="type"]:checked + label#labelDeposit {
+                background-color: #eafff0; border-color: #06C755; color: #06C755;
+              }
+              input[name="type"]:not(:checked) + label#labelDeposit {
+                background-color: white; border-color: #e2e8f0; color: #64748b;
+              }
+              
+              input[name="type"]:checked + label#labelWithdraw {
+                background-color: #fff5f5; border-color: #ef4444; color: #ef4444; font-weight: bold;
+              }
+              input[name="type"]:not(:checked) + label#labelWithdraw {
+                background-color: white; border-color: #e2e8f0; color: #64748b; font-weight: normal;
+              }
+            </style>
             <div class="form-group">
               <label class="form-label">
                 <span class="label-icon">💰</span>จำนวนเงิน
@@ -306,6 +380,21 @@
           </form>
         </div>
       </div>
+      
+      <div id="successScreen" class="success-screen">
+        <div class="success-icon-box">
+          <div class="success-icon-emoji">🎉</div>
+        </div>
+        <h2 class="success-title">บันทึกข้อมูลสำเร็จ!</h2>
+        <p class="success-desc">
+          ขอบคุณสำหรับการรายงาน<br>
+          ระบบได้บันทึกยอดขายและสลิปเรียบร้อยแล้ว
+        </p>
+        <button type="button" class="btn-submit btn-secondary-custom" onclick="closeApp()">
+          ปิดหน้าต่าง
+        </button>
+      </div>
+
     </div>
 
     <div class="loading-overlay" id="loadingOverlay">
@@ -314,7 +403,29 @@
     </div>
 
     <script>
-      // Wait for DOM to be ready
+      // ฟังก์ชันปิดหน้าต่าง
+      function closeApp() {
+        try {
+          if (typeof liff !== 'undefined') {
+            if (liff.isInClient()) {
+                liff.closeWindow();
+                return;
+            }
+          }
+          window.open('','_self').close();
+          window.close();
+        } catch (e) {
+          console.log('Cannot close window:', e);
+          alert('กรุณากดปิดหน้าต่างที่มุมบนขวาของแอป');
+        }
+      }
+      
+      document.addEventListener('DOMContentLoaded', function() {
+        if (typeof liff !== 'undefined') {
+            liff.init({ liffId: "" }).catch(err => { console.log('LIFF init error (Optional)', err); });
+        }
+      });
+
       document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('oilForm');
         const submitBtn = document.getElementById('submitBtn');
@@ -322,6 +433,19 @@
         const imageInput = document.getElementById('imageFile');
         const fileName = document.getElementById('fileName');
         const fileLabel = document.getElementById('fileLabel');
+        const contentWrapper = document.getElementById('contentWrapper');
+        const successScreen = document.getElementById('successScreen');
+
+        // ✅ User ID Fix: ดึง userId จาก URL มาใส่ใน input hidden
+        google.script.url.getLocation(function(location) {
+          var urlUserId = location.parameter.userId;
+          var inputField = document.getElementById('userId');
+          
+          if (urlUserId && (!inputField.value || inputField.value === '' || inputField.value === 'undefined')) {
+             inputField.value = urlUserId;
+             console.log("UserID filled from URL parameter: " + urlUserId);
+          }
+        });
 
         // Handle file input
         imageInput.addEventListener('change', function(e) {
@@ -329,8 +453,8 @@
             const file = e.target.files[0];
             fileName.textContent = '✓ ' + file.name;
             fileName.classList.add('show');
-            fileLabel.style.borderColor = '#06C755';
-            fileLabel.style.background = '#f0fdf4';
+            fileLabel.style.borderColor = '#E6C27A';
+            fileLabel.style.background = '#fffbf5';
           }
         });
 
@@ -338,7 +462,6 @@
         form.addEventListener('submit', function(e) {
           e.preventDefault();
           
-          // Show loading
           submitBtn.disabled = true;
           loadingOverlay.classList.add('show');
 
@@ -364,29 +487,17 @@
               userId: document.getElementById('userId').value, 
               branch: form.branch.value,
               amount: form.amount.value,
+              // ✅ ตอนนี้ส่วนนี้จะทำงานได้ถูกต้องแล้ว เพราะมี input name="type" อยู่ใน HTML แล้ว
+              type: document.querySelector('input[name="type"]:checked').value,
               imageData: fileData
             };
 
-            // Submit to Google Apps Script
             google.script.run
               .withSuccessHandler(function(response) {
                 loadingOverlay.classList.remove('show');
-                alert('✅ บันทึกข้อมูลสำเร็จ!');
-                
-                // Try to close window
-                if (typeof liff !== 'undefined') {
-                  liff.closeWindow();
-                } else {
-                  window.close();
-                }
-                
-                // Reset form
+                contentWrapper.style.display = 'none';
+                successScreen.style.display = 'block';
                 form.reset();
-                fileName.classList.remove('show');
-                fileName.textContent = '';
-                fileLabel.style.borderColor = '#cbd5e0';
-                fileLabel.style.background = '#f8fafc';
-                submitBtn.disabled = false;
               })
               .withFailureHandler(function(error) {
                 loadingOverlay.classList.remove('show');

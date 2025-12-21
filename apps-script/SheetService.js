@@ -39,7 +39,7 @@ function getOrCreateSheet(sheetName, headers = null) {
 /**
  * Save Oil Report
  * บันทึกรายงานน้ำมันลง Sheet พร้อมคำนวณยอดสะสม
- * (เวอร์ชันปรับปรุง: เพิ่ม Flush และจัดการ Month Key ให้แม่นยำ)
+ * (รองรับการแจ้งเบิกจ่าย Withdrawal)
  */
 function saveOilReport(data) {
   try {
@@ -47,13 +47,16 @@ function saveOilReport(data) {
     const sheetName = SHEET_CONFIG.SHEETS.OIL_REPORTS || 'Oil_Reports';
     let sheet = ss.getSheetByName(sheetName);
     
+    // ดึง Header จาก Config (ต้องตรวจสอบว่าใน Config.js มีคอลัมน์ 'Type' หรือไม่)
     const configHeaders = SHEET_CONFIG.COLUMNS.OIL_REPORTS; 
     
+    // สร้าง Sheet ใหม่ถ้ายังไม่มี
     if (!sheet) {
       sheet = ss.insertSheet(sheetName);
       sheet.appendRow(configHeaders);
       sheet.getRange(1, 1, 1, configHeaders.length).setFontWeight('bold').setBackground('#4285f4').setFontColor('#ffffff');
     } else {
+      // ตรวจสอบ Header ว่าตรงกับ Config ไหม
       const currentHeaders = sheet.getRange(1, 1, 1, configHeaders.length).getValues()[0];
       const isHeaderMatch = currentHeaders.every((h, i) => String(h).toLowerCase() === configHeaders[i].toLowerCase());
       
@@ -66,17 +69,30 @@ function saveOilReport(data) {
     const timestamp = new Date();
     const monthKey = Utilities.formatDate(timestamp, 'Asia/Bangkok', 'yyyy-MM');
     
-    // เตรียมข้อมูล: timestamp, branch, amount, type, image_url, staff_user_id, month_key
-    const rowData = [timestamp, data.branch, data.amount, data.type || 'deposit', data.imageUrl, data.userId, monthKey];
+    // ✅ จัดการค่า Type ให้เป็นตัวพิมพ์เล็กเสมอ (deposit / withdraw)
+    const transactionType = (data.type || 'deposit').toLowerCase();
+
+    // ✅ เตรียมข้อมูลลงแถว (ลำดับต้องตรงกับ Header ใน Config.js ของคุณ)
+    // ลำดับจากโค้ดเดิมของคุณ: Timestamp, Branch, Amount, Type, Image, UserID, MonthKey
+    const rowData = [
+      timestamp, 
+      data.branch, 
+      data.amount, 
+      transactionType, // บันทึกประเภทรายการ
+      data.imageUrl, 
+      data.userId, 
+      monthKey
+    ];
     
     sheet.appendRow(rowData);
     
-    // 💡 เพิ่มการตั้งค่า Format ของคอลัมน์ Month Key (คอลัมน์ที่ 7) ให้เป็น Plain Text เพื่อป้องกัน Sheets แปลงเป็น Date
+    // ตั้งค่า Format ของคอลัมน์ Month Key (คอลัมน์ที่ 7) ให้เป็น Plain Text
     sheet.getRange(sheet.getLastRow(), 7).setNumberFormat('@');
     
-    // 💡 สำคัญ: สั่งให้ Google Sheets อัปเดตข้อมูลทันที
+    // สั่งให้ Google Sheets อัปเดตข้อมูลทันที
     SpreadsheetApp.flush();
     
+    // --- ส่วนการคำนวณยอดสะสมกลับมาแสดงผล ---
     const allData = sheet.getDataRange().getValues();
     const headers = allData.shift(); 
     
@@ -84,6 +100,7 @@ function saveOilReport(data) {
       let obj = {};
       headers.forEach((h, i) => {
         if (h) {
+          // แปลง Header ให้เป็น Key ตัวพิมพ์เล็ก (เช่น 'Month Key' -> 'month_key')
           const key = String(h).toLowerCase().trim().replace(/\s+/g, '_');
           obj[key] = row[i];
         }
@@ -91,12 +108,10 @@ function saveOilReport(data) {
       return obj;
     });
     
-    // กรองข้อมูลด้วย Logic ที่รองรับทั้ง String และ Date Object
+    // กรองข้อมูลเฉพาะสาขานี้ และ เดือนนี้
     const currentMonthData = reportData.filter(row => {
-      // เปรียบเทียบสาขา (แบบไม่สน Case)
       const branchMatch = String(row['branch'] || '').trim().toLowerCase() === String(data.branch).trim().toLowerCase();
 
-      // เปรียบเทียบ Month Key (จัดการกรณี Sheets แปลงเป็น Date Object)
       let rowMonthKey = row['month_key'];
       if (rowMonthKey instanceof Date) {
         rowMonthKey = Utilities.formatDate(rowMonthKey, 'Asia/Bangkok', 'yyyy-MM');
@@ -107,10 +122,16 @@ function saveOilReport(data) {
       return branchMatch && (rowMonthKey === monthKey);
     });
     
+    // ✅ คำนวณยอดรวม (Logic: ถ้าเป็น withdraw ให้ลบ, ถ้าไม่ใช่ ให้บวก)
     const totalAccumulated = currentMonthData.reduce((sum, row) => {
-      const amt = safeParseFloat(row['amount']); 
-      const type = String(row['type'] || 'deposit').toLowerCase();
-      return type === 'deposit' ? sum + amt : sum - amt;
+      const amt = parseFloat(row['amount']) || 0; // ใช้ parseFloat เพื่อความชัวร์
+      const type = String(row['type'] || 'deposit').trim().toLowerCase();
+      
+      if (type === 'withdraw') {
+        return sum - amt; // 🔴 หักออก
+      } else {
+        return sum + amt; // 🟢 บวกเพิ่ม
+      }
     }, 0);
     
     return {
@@ -443,5 +464,78 @@ function isDuplicateDate(sheet, date) {
   } catch (error) {
     Logger.log(`❌ Error checking duplicate date: ${error.message}`);
     return false;
+  }
+}
+
+// ========================================
+// 💰 BALANCE CHECK FUNCTION (NEW)
+// ========================================
+
+/**
+ * Get Branch Summary
+ * ดึงยอดสะสมรายสาขา ประจำเดือนปัจจุบัน
+ * @param {string} branchName - รหัสสาขา เช่น EMQ, ONB
+ */
+function getBranchSummary(branchName) {
+  try {
+    // 1. ดึงข้อมูลทั้งหมดจาก Sheet Oil_Reports โดยใช้ Helper ที่มีอยู่แล้ว
+    const allData = getSheetDataAsArray('Oil_Reports'); 
+    
+    // 2. หาเดือนปัจจุบัน (Format: yyyy-MM) เพื่อกรองเฉพาะยอดเดือนนี้
+    const currentMonthKey = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM');
+    
+    // 3. กรองข้อมูลตามสาขา และ เดือน
+    const filteredRows = allData.filter(row => {
+      // แปลงชื่อ Key ให้เป็นตัวพิมพ์เล็กหมดเพื่อความชัวร์ (ขึ้นอยู่กับ Header ใน Sheet)
+      // ปกติ Helper getSheetDataAsArray จะ return Key ตาม Header เป๊ะๆ
+      // เราจึงต้องเดาว่า Header คือ 'Branch', 'Month Key', 'Type'
+      
+      const rowBranch = String(row['Branch'] || row['branch'] || '').trim().toUpperCase();
+      const rowMonth = String(row['Month Key'] || row['month key'] || row['month_key'] || '').trim();
+      
+      // เทียบสาขา (Input ก็ควร UpperCase)
+      const isBranchMatch = rowBranch === branchName.toUpperCase();
+      
+      // เทียบเดือน
+      const isMonthMatch = rowMonth === currentMonthKey;
+      
+      return isBranchMatch && isMonthMatch;
+    });
+
+    // 4. คำนวณยอดรวม (Deposit - Withdraw)
+    let totalDeposit = 0;
+    let totalWithdraw = 0;
+    
+    filteredRows.forEach(row => {
+      const amount = parseFloat(row['Amount'] || row['amount'] || 0);
+      const type = String(row['Type'] || row['type'] || 'deposit').toLowerCase();
+      
+      if (type === 'withdraw') {
+        totalWithdraw += amount;
+      } else {
+        totalDeposit += amount;
+      }
+    });
+
+    const netBalance = totalDeposit - totalWithdraw;
+
+    return {
+      branch: branchName.toUpperCase(),
+      month: currentMonthKey,
+      totalDeposit: totalDeposit,
+      totalWithdraw: totalWithdraw,
+      netBalance: netBalance,
+      transactionCount: filteredRows.length
+    };
+
+  } catch (error) {
+    Logger.log(`❌ Error in getBranchSummary: ${error.message}`);
+    // Return ค่า 0 กัน Error
+    return { 
+      branch: branchName, 
+      month: 'N/A', 
+      netBalance: 0, 
+      count: 0 
+    };
   }
 }

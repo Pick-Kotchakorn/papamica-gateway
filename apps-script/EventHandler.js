@@ -54,115 +54,112 @@ function handleMessageEvent(event) {
 function handleTextMessage(event) {
   const userId = event.source?.userId;
   const userMessage = event.message?.text?.trim();
-  const replyToken = event.replyToken; // ✅ รับ Reply Token
+  const replyToken = event.replyToken;
 
   if (!userId || !userMessage) return;
 
   try {
     sendLoadingAnimation(userId);
-    
-    // ดึงข้อมูล Profile เพื่อใช้บันทึก Log
     const profile = getUserProfile(userId);
     const displayName = profile.displayName || 'Unknown';
 
     let aiResponse = '';
     let intent = 'N/A';
 
-    // ----------------------------------------------------
-    // 🧠 Dialogflow Processing
-    // ----------------------------------------------------
     if (SYSTEM_CONFIG.FEATURES.DIALOGFLOW_ENABLED) {
       const dfResponse = queryDialogflow(userMessage, userId);
       const intentName = dfResponse.intent;
       const parameters = dfResponse.parameters;
 
       // ====================================================
-      // 🟢 CASE 1: เริ่มต้น (เรียกเมนู Flex Message เปิดฟอร์ม)
-      // Intent: oil-report-start
+      // 💰 NEW: เช็คยอดเงินสะสม (พร้อม Dynamic Quick Reply)
       // ====================================================
-      if (intentName === 'oil-report-start') {
-        
-        // 📌 URL ของ Web App (แนบ userId ไปด้วย)
-        const webAppUrl = 'https://script.google.com/macros/s/AKfycbzSksjKBT_LoifYrKdtuBZ0b8q-gVThIJ2v7M286N98sYdegrMIMDQM8oudXeobrKQL/exec';
-        const formUrl = `${webAppUrl}?userId=${userId}`;
-        
-        const flexMessage = {
-          "type": "flex",
-          "altText": "เปิดฟอร์มรายงานน้ำมัน",
-          "contents": {
-            "type": "bubble",
-            "body": {
-              "type": "box",
-              "layout": "vertical",
-              "contents": [
-                { "type": "text", "text": "📝 รายงานยอดน้ำมัน", "weight": "bold", "size": "xl", "color": "#1DB446" },
-                { "type": "text", "text": "กรุณากดปุ่มด้านล่างเพื่อกรอกข้อมูลและแนบสลิป", "margin": "md", "color": "#666666", "wrap": true }
-              ]
-            },
-            "footer": {
-              "type": "box",
-              "layout": "vertical",
-              "contents": [
-                {
-                  "type": "button",
-                  "action": {
-                    "type": "uri",
-                    "label": "เปิดฟอร์มกรอกข้อมูล",
-                    "uri": formUrl
-                  },
-                  "style": "primary",
-                  "color": "#06C755"
-                }
-              ]
-            }
-          }
-        };
+      if ((intentName === 'oil-check-balance' || intentName === 'oil-check-balance-branch') && parameters.branch) {
+         
+           const branch = parameters.branch;
+           const summary = getBranchSummary(branch);
 
-        sendLineMessages(userId, { messages: [flexMessage] }, replyToken);
-        intent = intentName;
-        aiResponse = '[Sent Flex Message: Open Form]';
-      }
+           // 1. Mapping ชื่อสาขา
+           const branchNames = {
+             'EMQ': 'EmQuartier',
+             'ONB': 'One Bangkok',
+             'KSQ': 'KingsQuare'
+           };
+           
+           const displayBranch = branchNames[summary.branch] || summary.branch;
+           
+           const fmt = (num) => Number(num).toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+           const nowStr = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm');
 
-      // ====================================================
-      // 🚫 CASE 2 & 3: ปิดการทำงาน Flow แชทแบบเก่า (Comment Out)
-      // เพื่อบังคับให้ใช้ฟอร์ม และป้องกัน Intent ชนกัน
-      // ====================================================
-      
-      /*
-      else if (intentName === 'oil-report-select-branch' && parameters.branch) {
-         // (Code เดิมถูกปิดการทำงาน)
+           if (dfResponse.messages) {
+             let msgString = JSON.stringify(dfResponse.messages);
+             
+             // แทนที่ตัวแปรต่างๆ
+             msgString = msgString.replace(/###BRANCH###/g, displayBranch); 
+             msgString = msgString.replace(/###MONTH###/g, summary.month);
+             msgString = msgString.replace(/###BALANCE###/g, fmt(summary.netBalance));
+             msgString = msgString.replace(/###DATE###/g, nowStr);
+             msgString = msgString.replace(/###USER_ID###/g, userId);
+
+             const finalMessages = JSON.parse(msgString);
+
+             // ✨ LOGIC ใหม่: สร้าง Quick Reply แบบ Dynamic (ตัดสาขาปัจจุบันออก)
+             const allBranches = [
+                { code: 'EMQ', label: 'EmQuartier', text: 'เช็คยอด EmQuartier' },
+                { code: 'ONB', label: 'One Bangkok', text: 'เช็คยอด One Bangkok' },
+                { code: 'KSQ', label: 'KingsQuare', text: 'เช็คยอด KingsQuare' }
+             ];
+
+             // กรองเอาเฉพาะสาขาที่ "ไม่ใช่" สาขาปัจจุบัน
+             const quickReplyItems = allBranches
+                .filter(b => b.code !== summary.branch) // summary.branch คือรหัสย่อ (EMQ, ONB, KSQ)
+                .map(b => ({
+                   "type": "action",
+                   "action": {
+                     "type": "message",
+                     "label": b.label,
+                     "text": b.text
+                   }
+                }));
+
+             // ยัด Quick Reply ใส่เข้าไปใน Message ก้อนแรก (Flex Message)
+             if (finalMessages.length > 0 && quickReplyItems.length > 0) {
+                finalMessages[0].quickReply = {
+                   "items": quickReplyItems
+                };
+             }
+
+             sendLineMessages(userId, { messages: finalMessages }, replyToken);
+             
+             intent = intentName;
+             aiResponse = `[Sent Balance Summary for ${displayBranch}]`;
+           } else {
+             pushSimpleMessage(userId, `ยอดสาขา ${displayBranch}: ${fmt(summary.netBalance)} บาท`);
+           }
+        
       }
-      else if (intentName === 'Oil Report - Amount' && parameters.amount) {
-         // (Code เดิมถูกปิดการทำงาน)
-      }
-      */
-      
       // ====================================================
-      // 🟢 Default Case: สนทนาทั่วไป
+      // 🟢 Default Case
       // ====================================================
-      else {
-        if (dfResponse.messages) {
-          sendLineMessages(userId, dfResponse, replyToken); // ✅ ส่ง replyToken
-          intent = intentName || 'dialogflow.general';
-          aiResponse = '[Dialogflow Response]';
+      else if (dfResponse.messages) { 
+        let msgString = JSON.stringify(dfResponse.messages);
+        if (msgString.includes('###USER_ID###')) {
+           msgString = msgString.replace(/###USER_ID###/g, userId);
         }
+        const finalMessages = JSON.parse(msgString);
+        sendLineMessages(userId, { messages: finalMessages }, replyToken);
+        
+        intent = intentName || 'dialogflow.general';
+        aiResponse = '[Dialogflow Response]';
       }
       
     } else {
-      // 🔴 Manual Mode (Dialogflow Disabled)
       pushSimpleMessage(userId, SYSTEM_CONFIG.MESSAGES.MAINTENANCE);
       intent = 'manual.maintenance';
       aiResponse = SYSTEM_CONFIG.MESSAGES.MAINTENANCE;
     }
     
-    // ----------------------------------------------------
-    // 📊 Logging System
-    // ----------------------------------------------------
-    
-    // 1. อัปเดตสถิติการโต้ตอบของผู้ใช้ (Follower Interaction)
     updateFollowerInteraction(userId);
-
-    // 2. บันทึกบทสนทนา (Conversation Log)
     saveConversation({
       userId: userId,
       displayName: displayName,

@@ -78,14 +78,14 @@ const SHEET_CONFIG = {
     ],
     // 💡 NEW: เพิ่ม Column Structure สำหรับ Oil Report
     OIL_REPORTS: [
-        'timestamp',
-        'branch',
-        'amount',
-        'type',
-        'image_url',
-        'staff_user_id',
-        'month_key'
-    ] 
+      'Timestamp',
+      'Branch',
+      'Amount',
+      'Type',       
+      'Image URL',
+      'Staff User ID',
+      'Month Key'
+      ] 
   }
 };
 

@@ -506,11 +506,11 @@ function processFormSubmission(formData) {
 
     // 2. บันทึกลง Sheet
     const finalData = {
-      userId: formData.userId || 'Anonymous', // ✅ รับค่า userId มาใส่ตรงนี้
+      userId: formData.userId || 'Anonymous',
       branch: formData.branch,
       amount: parseFloat(formData.amount),
       imageUrl: driveImageUrl,
-      type: 'deposit'
+      type: formData.type || 'deposit' 
     };
 
     saveOilReport(finalData); 
