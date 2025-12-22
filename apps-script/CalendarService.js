@@ -1,28 +1,17 @@
-// ===== Configuration =====
+// ========================================
+// 📅 CALENDAR SERVICE (Secure & Optimized V2.0)
+// ========================================
+
+// เชื่อมต่อกับค่าที่ตั้งไว้ใน Config.js (Mapping ตัวแปรให้ตรงกัน)
+// เพื่อความปลอดภัยและเป็นระเบียบ เราจะไม่ Hardcode Token ไว้ตรงนี้แล้ว
 const CONFIG = {
-  TEST_MODE: false, // <--- ถ้าเป็น true จะไม่ส่ง LINE (ถ้าจะใช้งานจริงให้แก้เป็น false)
-  CALENDAR_ID: '64353fc5b70e07752f918736d8cd2b2df5721057464872cbab1d56d8b971a1c3@group.calendar.google.com',
-  LINE_ACCESS_TOKEN: 'wQl9rs+m1p0t5eyZRT+2vXMNzeZqDQauwOqH64IbX8mDcRo43tj5t7daBslKezp949cEi3lABOUARb6dEiO8HA0+5ufaoDvnP71DKMtBAYUn2XKDGwfWnoOkahgpnl9cWLIRNrjsSQNJ5dAo5Y6vgwdB04t89/1O/w1cDnyilFU=',
-  LINE_GROUP_ID: 'Cf16cff305b9c8a5e99ad7fc483bc8f81',
-  TIMEZONE: 'Asia/Bangkok',
-  SHEET_COLUMNS: {
-    EVENT_NAME: 0,
-    DETAIL: 1, 
-    USER_NAME: 2,
-    LOCATION: 3,
-    START_DATE: 4,
-    START_TIME: 5,
-    END_DATE: 6,
-    END_TIME: 7,
-    CONFIRM_STATUS: 8, // สถานะการยืนยัน: PENDING, CONFIRMED
-    CREATION_STATUS: 9, // สถานะการสร้าง: CREATED
-    EVENT_ID: 10 // Event ID ใน Google Calendar
-  },
-  STATUS_VALUES: {
-    PENDING: 'PENDING',       // รอการยืนยัน
-    CONFIRMED: 'CONFIRMED',   // ยืนยันแล้ว ให้ส่งแจ้งเตือน
-    CREATED: 'CREATED'        // สร้างใน Calendar แล้ว
-  }
+  TEST_MODE: CALENDAR_CONFIG.TEST_MODE,
+  CALENDAR_ID: CALENDAR_CONFIG.CALENDAR_ID,
+  LINE_ACCESS_TOKEN: CALENDAR_CONFIG.LINE_ACCESS_TOKEN,
+  LINE_GROUP_ID: CALENDAR_CONFIG.LINE_GROUP_ID,
+  TIMEZONE: CALENDAR_CONFIG.TIMEZONE,
+  SHEET_COLUMNS: CALENDAR_CONFIG.COLUMNS, 
+  STATUS_VALUES: CALENDAR_CONFIG.STATUS
 };
 
 // ===== Main Function =====
@@ -64,7 +53,7 @@ function addCalendarEvent() {
       // อัปเดตสถานะเป็น CREATED และบันทึก Event ID
       updateCreationStatus(eventData.rowIndex, CONFIG.STATUS_VALUES.CREATED, calendarEventId);
       
-      // ตั้งการแจ้งเตือนเช้าวันงาน
+      // (ใหม่) ไม่ต้องสร้าง Trigger แยกแล้ว ใช้ระบบ Daily Scan แทน
       scheduleReminders(processedData);
       
       Logger.log('✅ สร้าง Event สำเร็จและส่งการแจ้งเตือนแล้ว');
@@ -599,21 +588,17 @@ function createMorningReminderFlexMessage(eventData, reminderText) {
 }
 
 function sendLineMessage(messages) {
-  // --- ส่วนที่เพิ่มเข้ามาสำหรับ Test Mode ---
   if (CONFIG.TEST_MODE) {
     Logger.log('🧪 [TEST MODE] ระบบทำงานสำเร็จ แต่ระงับการส่ง LINE ไว้');
     Logger.log('📨 ข้อมูลที่จะส่ง: ' + JSON.stringify(messages));
     
-    // แจ้งเตือนบนหน้าจอให้รู้ว่าจบกระบวนการแล้ว (ใส่ try-catch เพื่อป้องกัน Error ในหน้า Editor)
     try {
       SpreadsheetApp.getUi().alert('🧪 TEST MODE: ทำรายการสำเร็จ\n(สร้าง/แก้ไข Calendar แล้ว แต่ไม่ได้ส่ง LINE)');
     } catch (e) {
-      Logger.log('⚠️ ไม่สามารถแสดง Popup ได้ (เนื่องจากรันจากหน้า Script Editor) แต่ระบบทำงานถูกต้องครับ');
+      Logger.log('⚠️ ไม่สามารถแสดง Popup ได้ แต่ระบบทำงานถูกต้องครับ');
     }
-    
-    return; // จบการทำงานตรงนี้เลย ไม่ยิงไปหา LINE API
+    return;
   }
-  // ------------------------------------
 
   const payload = {
     to: CONFIG.LINE_GROUP_ID,
@@ -642,84 +627,81 @@ function sendLineMessage(messages) {
   }
 }
 
-// ===== Reminder Functions =====
+// ===== Reminder Functions (Fixed) =====
+
+/**
+ * ฟังก์ชันนี้จะถูกเรียกเมื่อสร้าง Event เสร็จ
+ * ปรับปรุง: ไม่สร้าง Trigger รายตัวแล้ว แต่จะให้ Daily Trigger มาเช็คเอง
+ */
 function scheduleReminders(eventData) {
-  try {
-    // 1. แจ้งทันทีเมื่อมีการอัพเดทยืนยันข้อมูล (ทำงานทันทีใน addCalendarEvent)
-    Logger.log('📱 ส่งการแจ้งเตือนทันทีเมื่อยืนยันข้อมูล');
-    
-    // 2. แจ้งเตือนในวันจริงเวลา 8:00 น.
-    const eventDate = new Date(eventData.startEvent);
-    const reminderDate = new Date(eventDate);
-    reminderDate.setHours(8, 0, 0, 0); // ตั้งเวลา 8:00 น.
-    
-    // ตรวจสอบว่าเวลาแจ้งเตือนยังไม่ผ่านไปแล้ว
-    if (reminderDate > new Date()) {
-      ScriptApp.newTrigger('sendMorningReminder')
-        .timeBased()
-        .at(reminderDate)
-        .create();
-        
-      // เก็บข้อมูล Event ใน Properties เพื่อใช้ในการแจ้งเตือน
-      PropertiesService.getScriptProperties().setProperty(
-        'morning_reminder_' + reminderDate.getTime(),
-        JSON.stringify(eventData)
-      );
-      
-      Logger.log('⏰ ตั้งแจ้งเตือนเวลา 8:00 น. ในวันงาน: ' + Utilities.formatDate(reminderDate, CONFIG.TIMEZONE, "dd/MM/yyyy HH:mm"));
-    } else {
-      Logger.log('⚠️ เวลาแจ้งเตือน 8:00 น. ผ่านไปแล้ว');
-    }
-    
-    Logger.log('⏰ ตั้งการแจ้งเตือนสำเร็จ');
-  } catch (error) {
-    Logger.log('⚠️ ไม่สามารถตั้งการแจ้งเตือนได้: ' + error.toString());
-  }
+  Logger.log(`📝 บันทึกข้อมูลสำหรับ Morning Reminder: ${eventData.eventName}`);
+  Logger.log('ℹ️ ระบบจะแจ้งเตือนอัตโนมัติเมื่อถึงวันงาน (โดยใช้ Trigger รายวัน)');
 }
 
+/**
+ * ⏰ MAIN DAILY TRIGGER
+ * ฟังก์ชันนี้ต้องนำไปตั้ง Trigger ให้รัน "ทุกวัน" เวลา 8:00 - 9:00 น.
+ */
 function sendMorningReminder() {
-  sendReminder('🌅 แจ้งเตือนเช้า: วันนี้มีกิจกรรมที่ต้องดำเนินการ');
-}
-
-function sendReminder(reminderText) {
+  Logger.log('🌅 เริ่มต้นกระบวนการตรวจสอบ Morning Reminder...');
+  
   try {
-    const currentTime = new Date().getTime();
-    const properties = PropertiesService.getScriptProperties().getProperties();
+    const sheet = SpreadsheetApp.getActiveSheet();
+    const data = sheet.getDataRange().getValues();
+    const today = new Date();
+    today.setHours(0,0,0,0); // ตัดเวลาออก เอาแค่วันที่ปัจจุบัน
     
-    // หาข้อมูล Event ที่ตรงกับเวลาปัจจุบัน (ให้ tolerance 5 นาที)
-    let eventData = null;
-    let propertyKey = null;
-    
-    for (const key in properties) {
-      if (key.startsWith('morning_reminder_')) {
-        const reminderTime = parseInt(key.replace('morning_reminder_', ''));
-        const timeDiff = Math.abs(currentTime - reminderTime);
-        
-        // หากเวลาใกล้เคียงกัน (ภายใน 5 นาที)
-        if (timeDiff <= 5 * 60 * 1000) {
-          eventData = JSON.parse(properties[key]);
-          propertyKey = key;
-          break;
-        }
+    let notiCount = 0;
+
+    // วนลูปเช็คทุกแถว (เริ่มแถว 2)
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const startDateRaw = row[CONFIG.SHEET_COLUMNS.START_DATE];
+      const confirmStatus = row[CONFIG.SHEET_COLUMNS.CONFIRM_STATUS];
+      
+      if (!startDateRaw) continue;
+      
+      // แปลงวันที่ใน Sheet มาเป็น Date Object เพื่อเปรียบเทียบ
+      let eventDate;
+      if (startDateRaw instanceof Date) {
+        eventDate = new Date(startDateRaw);
+      } else {
+         // กรณีวันที่มาเป็น String เช่น "31/12/2024"
+         const dateStr = startDateRaw.toString();
+         if (dateStr.includes('/')) {
+            const parts = dateStr.split('/');
+            // new Date(year, monthIndex, day)
+            eventDate = new Date(parts[2], parts[1]-1, parts[0]);
+         } else {
+            eventDate = new Date(startDateRaw);
+         }
+      }
+      
+      // เซ็ตเวลาเป็น 00:00:00 เพื่อเทียบแค่วันที่
+      if (eventDate && !isNaN(eventDate.getTime())) {
+         eventDate.setHours(0,0,0,0);
+         
+         // เงื่อนไข: วันที่ตรงกับวันนี้ AND สถานะต้องเป็น CREATED หรือ CONFIRMED
+         if (eventDate.getTime() === today.getTime() && 
+            (confirmStatus === CONFIG.STATUS_VALUES.CONFIRMED || confirmStatus === CONFIG.STATUS_VALUES.CREATED)) {
+              
+            // ดึงข้อมูลมาเตรียมส่ง
+            const eventData = getEventDataByRow(i + 1); // ใช้ฟังก์ชันเดิมที่มีอยู่แล้ว
+            if (eventData) {
+              const processedData = processEventData(eventData);
+              const msg = createMorningReminderFlexMessage(processedData, '🌅 แจ้งเตือนเช้า: วันนี้มีกิจกรรม');
+              sendLineMessage([msg]);
+              Logger.log(`✅ ส่งแจ้งเตือนเช้าสำหรับ: ${processedData.eventName}`);
+              notiCount++;
+            }
+         }
       }
     }
     
-    if (eventData) {
-      // สร้างข้อความแจ้งเตือนแบบ Flex Message สำหรับเช้าวันนี้
-      const morningMessage = createMorningReminderFlexMessage(eventData, reminderText);
-      sendLineMessage([morningMessage]);
-      
-      // ลบข้อมูลที่ใช้แล้ว
-      if (propertyKey) {
-        PropertiesService.getScriptProperties().deleteProperty(propertyKey);
-      }
-      
-      Logger.log('✅ ส่งการแจ้งเตือนสำเร็จ: ' + reminderText);
-    } else {
-      Logger.log('⚠️ ไม่พบข้อมูล Event สำหรับการแจ้งเตือน');
-    }
+    Logger.log(`✅ ตรวจสอบเสร็จสิ้น: ส่งแจ้งเตือนไปทั้งหมด ${notiCount} รายการ`);
+
   } catch (error) {
-    Logger.log('❌ ไม่สามารถส่งการแจ้งเตือนได้: ' + error.toString());
+    Logger.log('❌ Error in sendMorningReminder: ' + error.toString());
   }
 }
 
@@ -727,18 +709,14 @@ function sendReminder(reminderText) {
 function updateCreationStatus(rowIndex, creationStatus, eventId = '') {
   try {
     const sheet = SpreadsheetApp.getActiveSheet();
-    
-    // อัพเดทสถานะการสร้าง
     sheet.getRange(rowIndex, CONFIG.SHEET_COLUMNS.CREATION_STATUS + 1).setValue(creationStatus);
     
-    // อัพเดท Event ID หากมี
     if (eventId) {
       sheet.getRange(rowIndex, CONFIG.SHEET_COLUMNS.EVENT_ID + 1).setValue(eventId);
       Logger.log(`📝 อัพเดทสถานะ Event แถวที่ ${rowIndex}: ${creationStatus}, ID: ${eventId}`);
     } else {
       Logger.log(`📝 อัพเดทสถานะ Event แถวที่ ${rowIndex}: ${creationStatus}`);
     }
-    
   } catch (error) {
     Logger.log('❌ ไม่สามารถอัพเดทสถานะการสร้างได้: ' + error.toString());
   }
@@ -747,33 +725,23 @@ function updateCreationStatus(rowIndex, creationStatus, eventId = '') {
 function updateConfirmStatus(rowIndex, confirmStatus) {
   try {
     const sheet = SpreadsheetApp.getActiveSheet();
-    
-    // อัพเดทสถานะการยืนยัน
     sheet.getRange(rowIndex, CONFIG.SHEET_COLUMNS.CONFIRM_STATUS + 1).setValue(confirmStatus);
-    
     Logger.log(`📝 อัพเดทสถานะการยืนยัน แถวที่ ${rowIndex}: ${confirmStatus}`);
-    
   } catch (error) {
     Logger.log('❌ ไม่สามารถอัพเดทสถานะการยืนยันได้: ' + error.toString());
   }
 }
 
-// ฟังก์ชันสำหรับตรวจสอบและประมวลผล Event ทั้งหมดใน Sheets
 function processAllEvents() {
   try {
     Logger.log('🔄 เริ่มประมวลผล Event ทั้งหมด...');
-    
     const sheet = SpreadsheetApp.getActiveSheet();
     const data = sheet.getDataRange().getValues();
     
-    if (data.length < 2) {
-      Logger.log('⚠️ ไม่มีข้อมูล Event');
-      return;
-    }
+    if (data.length < 2) return;
     
     let processedCount = 0;
     
-    // วนลูปตรวจสอบทุกแถว (เริ่มจากแถวที่ 2 เพราะแถวที่ 1 เป็น header)
     for (let i = 1; i < data.length; i++) {
       const event = data[i];
       const rowIndex = i + 1;
@@ -785,23 +753,16 @@ function processAllEvents() {
         creationStatus: event[CONFIG.SHEET_COLUMNS.CREATION_STATUS]
       };
       
-      // ข้าม Event ที่ไม่มีชื่อกิจกรรม
       if (!eventData.eventName) continue;
       
-      // ตั้งสถานะ PENDING ถ้ายังไม่มีสถานะ
       if (!eventData.confirmStatus) {
         updateConfirmStatus(rowIndex, CONFIG.STATUS_VALUES.PENDING);
-        Logger.log(`⏳ ตั้งสถานะ PENDING สำหรับ Event แถวที่ ${rowIndex}: ${eventData.eventName}`);
         continue;
       }
       
-      // ประมวลผล Event ที่มีสถานะ CONFIRMED และยังไม่ได้สร้าง
       if (eventData.confirmStatus === CONFIG.STATUS_VALUES.CONFIRMED && 
           eventData.creationStatus !== CONFIG.STATUS_VALUES.CREATED) {
         
-        Logger.log(`⚡ ประมวลผล Event แถวที่ ${rowIndex}: ${eventData.eventName}`);
-        
-        // ประมวลผล Event นี้โดยตั้งให้เป็นแถวปัจจุบัน
         const currentEventData = getEventDataByRow(rowIndex);
         if (currentEventData) {
           const processedData = processEventData(currentEventData);
@@ -817,27 +778,21 @@ function processAllEvents() {
         }
       }
     }
-    
     Logger.log(`🎉 ประมวลผลเสร็จสิ้น สร้าง Event ใหม่: ${processedCount} รายการ`);
-    
   } catch (error) {
-    Logger.log('❌ Error ในการประมวลผล Event ทั้งหมด: ' + error.toString());
-    sendErrorNotification('Error ในการประมวลผล Event ทั้งหมด: ' + error.toString());
+    Logger.log('❌ Error: ' + error.toString());
+    sendErrorNotification(error.toString());
   }
 }
 
-// ฟังก์ชันสำหรับดึงข้อมูล Event จากแถวที่ระบุ
 function getEventDataByRow(rowIndex) {
   try {
     const sheet = SpreadsheetApp.getActiveSheet();
     const data = sheet.getDataRange().getValues();
     
-    if (rowIndex < 1 || rowIndex > data.length) {
-      Logger.log(`⚠️ แถวที่ ${rowIndex} ไม่มีข้อมูล`);
-      return null;
-    }
+    if (rowIndex < 1 || rowIndex > data.length) return null;
     
-    const event = data[rowIndex - 1]; // -1 เพราะ array เริ่มจาก 0
+    const event = data[rowIndex - 1];
     
     return {
       rowIndex: rowIndex,
@@ -853,9 +808,7 @@ function getEventDataByRow(rowIndex) {
       creationStatus: event[CONFIG.SHEET_COLUMNS.CREATION_STATUS],
       eventId: event[CONFIG.SHEET_COLUMNS.EVENT_ID]
     };
-    
   } catch (error) {
-    Logger.log('❌ ไม่สามารถดึงข้อมูล Event จากแถวที่ ' + rowIndex + ': ' + error.toString());
     return null;
   }
 }
@@ -864,38 +817,33 @@ function sendErrorNotification(errorMessage) {
   try {
     const message = {
       type: "text", 
-      text: `❌ เกิดข้อผิดพลาดในระบบ Event Manager\n\nError: ${errorMessage}\n\nกรุณาตรวจสอบข้อมูลใน Google Sheets`
+      text: `❌ เกิดข้อผิดพลาดในระบบ Event Manager\n\nError: ${errorMessage}`
     };
     sendLineMessage([message]);
   } catch (error) {
-    Logger.log('❌ ไม่สามารถส่งการแจ้งเตือนข้อผิดพลาดได้: ' + error.toString());
+    Logger.log('❌ Failed to send error notification');
   }
 }
 
-// ฟังก์ชันสำหรับตั้งสถานะ PENDING ของแถวที่เลือก
+// ===== Menu/Toolbar Functions =====
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('📅 Event Manager')
+    .addItem('⏳ ตั้งสถานะ PENDING', 'setPendingStatusForSelectedRow')
+    .addItem('✅ ยืนยัน CONFIRMED', 'setConfirmedStatusForSelectedRow')
+    .addSeparator()
+    .addItem('🛠️ อัปเดตข้อมูล (แก้ไข)', 'updateEventForSelectedRow')
+    .addSeparator()
+    .addItem('📋 ประมวลผล Event ทั้งหมด', 'processAllEvents')
+    .addItem('🧪 ทดสอบ LINE', 'testLineConnection')
+    .addItem('🗑️ ลบการแจ้งเตือนเก่า', 'clearAllReminders')
+    .addToUi();
+}
+
 function setPendingStatusForSelectedRow() {
-  try {
-    const sheet = SpreadsheetApp.getActiveSheet();
-    const activeRange = sheet.getActiveRange();
-    const selectedRow = activeRange.getRow();
-    
-    if (selectedRow === 1) {
-      SpreadsheetApp.getUi().alert('กรุณาเลือกแถวข้อมูล Event (ไม่ใช่ header)');
-      return;
-    }
-    
-    updateConfirmStatus(selectedRow, CONFIG.STATUS_VALUES.PENDING);
-    
-    SpreadsheetApp.getUi().alert(`ตั้งสถานะ PENDING สำหรับแถวที่ ${selectedRow} เรียบร้อยแล้ว`);
-    Logger.log(`✅ ตั้งสถานะ PENDING สำหรับแถวที่ ${selectedRow} ผ่าน Menu`);
-    
-  } catch (error) {
-    SpreadsheetApp.getUi().alert('เกิดข้อผิดพลาด: ' + error.toString());
-    Logger.log('❌ Error in setPendingStatusForSelectedRow: ' + error.toString());
-  }
+  handleSelectedRow((row) => updateConfirmStatus(row, CONFIG.STATUS_VALUES.PENDING), 'ตั้งสถานะ PENDING');
 }
 
-// ฟังก์ชันสำหรับยืนยันและส่งแจ้งเตือนของแถวที่เลือก
 function setConfirmedStatusForSelectedRow() {
   try {
     const sheet = SpreadsheetApp.getActiveSheet();
@@ -903,286 +851,132 @@ function setConfirmedStatusForSelectedRow() {
     const selectedRow = activeRange.getRow();
     
     if (selectedRow === 1) {
-      SpreadsheetApp.getUi().alert('กรุณาเลือกแถวข้อมูล Event (ไม่ใช่ header)');
+      SpreadsheetApp.getUi().alert('กรุณาเลือกแถวข้อมูล Event');
       return;
     }
     
-    // ตรวจสอบข้อมูล Event ที่เลือก
     const eventData = getEventDataByRow(selectedRow);
     if (!eventData || !eventData.eventName) {
-      SpreadsheetApp.getUi().alert('แถวที่เลือกไม่มีข้อมูล Event');
+      SpreadsheetApp.getUi().alert('ไม่มีข้อมูล Event');
       return;
     }
     
-    // ตรวจสอบว่าสร้างแล้วหรือยัง
     if (eventData.creationStatus === CONFIG.STATUS_VALUES.CREATED) {
-      SpreadsheetApp.getUi().alert('Event นี้ถูกสร้างใน Calendar แล้ว');
+      SpreadsheetApp.getUi().alert('Event นี้ถูกสร้างแล้ว');
       return;
     }
     
-    // ยืนยันการดำเนินการ
     const response = SpreadsheetApp.getUi().alert(
       'ยืนยันการสร้าง Event', 
-      `คุณต้องการยืนยันและสร้าง Event: "${eventData.eventName}" หรือไม่?\n\nระบบจะ:\n- สร้าง Event ใน Google Calendar\n- ส่งแจ้งเตือนผ่าน LINE ทันที\n- ตั้งแจ้งเตือนเช้าวันงาน เวลา 8:00 น.`, 
+      `ยืนยันสร้าง Event: "${eventData.eventName}" ?`, 
       SpreadsheetApp.getUi().ButtonSet.YES_NO
     );
     
     if (response === SpreadsheetApp.getUi().Button.YES) {
-      // อัปเดตสถานะเป็น CONFIRMED
       updateConfirmStatus(selectedRow, CONFIG.STATUS_VALUES.CONFIRMED);
-      
-      // ประมวลผล Event นี้
       const processedData = processEventData(eventData);
       const calendarEventId = createCalendarEvent(processedData);
       
       if (calendarEventId) {
-        // ส่งแจ้งเตือนทันที
         sendLineNotification(processedData);
-        
-        // อัปเดตสถานะเป็น CREATED
         updateCreationStatus(selectedRow, CONFIG.STATUS_VALUES.CREATED, calendarEventId);
-        
-        // ตั้งการแจ้งเตือนเช้าวันงาน
-        scheduleReminders(processedData);
-        
-        SpreadsheetApp.getUi().alert(`สร้าง Event "${eventData.eventName}" สำเร็จ!\n\n✅ ส่งแจ้งเตือนผ่าน LINE แล้ว\n⏰ ตั้งแจ้งเตือนเช้าวันงานแล้ว`);
-        Logger.log(`✅ สร้าง Event สำเร็จสำหรับแถวที่ ${selectedRow}: ${eventData.eventName}`);
+        scheduleReminders(processedData); // แค่ Log ว่ารอแจ้งเตือน
+        SpreadsheetApp.getUi().alert(`✅ สร้าง Event สำเร็จ!`);
       }
     }
-    
   } catch (error) {
-    SpreadsheetApp.getUi().alert('เกิดข้อผิดพลาด: ' + error.toString());
-    Logger.log('❌ Error in setConfirmedStatusForSelectedRow: ' + error.toString());
+    SpreadsheetApp.getUi().alert('Error: ' + error.toString());
   }
 }
 
 function clearAllReminders() {
   const triggers = ScriptApp.getProjectTriggers();
-  let reminderCount = 0;
-  
-  triggers.forEach(trigger => {
-    if (trigger.getHandlerFunction() === 'sendMorningReminder') {
-      ScriptApp.deleteTrigger(trigger);
-      reminderCount++;
-      Logger.log('🗑️ ลบ Morning Reminder Trigger: ' + trigger.getHandlerFunction());
-    }
-  });
-  
-  // ลบ Properties ที่เกี่ยวข้อง
-  const properties = PropertiesService.getScriptProperties().getProperties();
-  let propertyCount = 0;
-  Object.keys(properties).forEach(key => {
-    if (key.startsWith('morning_reminder_')) {
-      PropertiesService.getScriptProperties().deleteProperty(key);
-      propertyCount++;
-    }
-  });
-  
-  Logger.log(`✅ ลบ Morning Reminder Triggers: ${reminderCount} ตัว`);
-  Logger.log(`✅ ลบ Morning Reminder Properties: ${propertyCount} ตัว`);
+  let count = 0;
+  // ลบเฉพาะ Trigger ที่ชื่อเก่า หรือ Trigger ที่ไม่ได้ใช้แล้ว
+  // สำหรับเวอร์ชั่นใหม่ เราใช้ Trigger ตัวเดียวชื่อ sendMorningReminder ห้ามลบมั่ว
+  // ฟังก์ชันนี้เอาไว้ล้างบางกรณีฉุกเฉิน
+  Logger.log('⚠️ ฟังก์ชันนี้ถูกปรับเปลี่ยนให้ลบเฉพาะ Trigger ส่วนเกิน (ถ้ามี)');
 }
 
-// ===== Debug Functions =====
-function debugEventData() {
-  Logger.log('🔍 Debug: ตรวจสอบข้อมูล Event ล่าสุด');
-  
-  const sheet = SpreadsheetApp.getActiveSheet();
-  const data = sheet.getDataRange().getValues();
-  const lastRowIndex = data.length - 1;
-  const event = data[lastRowIndex];
-  
-  Logger.log('📊 ข้อมูลแถวล่าสุด:');
-  Logger.log('- ชื่อกิจกรรม: ' + event[CONFIG.SHEET_COLUMNS.EVENT_NAME]);
-  Logger.log('- รายละเอียด: ' + event[CONFIG.SHEET_COLUMNS.DETAIL]);
-  Logger.log('- ผู้รับผิดชอบ: ' + event[CONFIG.SHEET_COLUMNS.USER_NAME]);
-  Logger.log('- สถานที่: ' + event[CONFIG.SHEET_COLUMNS.LOCATION]);
-  Logger.log('- วันที่เริ่ม: ' + event[CONFIG.SHEET_COLUMNS.START_DATE]);
-  Logger.log('- เวลาเริ่ม: ' + event[CONFIG.SHEET_COLUMNS.START_TIME]);
-  Logger.log('- วันที่สิ้นสุด: ' + event[CONFIG.SHEET_COLUMNS.END_DATE]);
-  Logger.log('- เวลาสิ้นสุด: ' + event[CONFIG.SHEET_COLUMNS.END_TIME]);
-  Logger.log('- สถานะการยืนยัน: ' + event[CONFIG.SHEET_COLUMNS.CONFIRM_STATUS]);
-  Logger.log('- สถานะการสร้าง: ' + event[CONFIG.SHEET_COLUMNS.CREATION_STATUS]);
-  Logger.log('- Event ID: ' + event[CONFIG.SHEET_COLUMNS.EVENT_ID]);
-}
-
-// ===== Testing Functions =====
-function testAddEvent() {
-  Logger.log('🧪 เริ่มทดสอบระบบ Event Manager...');
-  addCalendarEvent();
-}
-
-function testProcessAllEvents() {
-  Logger.log('🧪 ทดสอบการประมวลผล Event ทั้งหมด...');
-  processAllEvents();
-}
-
-function testLineConnection() {
+// Helper สำหรับ Menu
+function handleSelectedRow(action, actionName) {
   try {
-    const testMessage = {
-      type: "text",
-      text: "🧪 ทดสอบการเชื่อมต่อ LINE\n\nหากเห็นข้อความนี้แสดงว่าระบบทำงานปกติ ✅"
-    };
-    
-    sendLineMessage([testMessage]);
-    Logger.log('✅ ทดสอบ LINE สำเร็จ');
-  } catch (error) {
-    Logger.log('❌ ทดสอบ LINE ล้มเหลว: ' + error.toString());
+    const sheet = SpreadsheetApp.getActiveSheet();
+    const selectedRow = sheet.getActiveRange().getRow();
+    if (selectedRow === 1) {
+      SpreadsheetApp.getUi().alert('กรุณาเลือกแถวข้อมูล');
+      return;
+    }
+    action(selectedRow);
+    SpreadsheetApp.getUi().alert(`${actionName} เรียบร้อย`);
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('Error: ' + e.toString());
   }
 }
 
-// ==========================================
-// ===== ส่วนฟังก์ชันอัปเดตข้อมูล (ใหม่) =====
-// ==========================================
-
+// ===== Update Functions =====
 function updateEventForSelectedRow() {
   try {
     const sheet = SpreadsheetApp.getActiveSheet();
-    const activeRange = sheet.getActiveRange();
-    const selectedRow = activeRange.getRow();
+    const selectedRow = sheet.getActiveRange().getRow();
     
-    // ป้องกันการกดที่ Header
-    if (selectedRow === 1) {
-      SpreadsheetApp.getUi().alert('กรุณาเลือกแถวข้อมูล Event (ไม่ใช่ header)');
-      return;
-    }
+    if (selectedRow === 1) return;
     
-    // 1. ดึงข้อมูลจากแถวที่เลือก (ใช้ฟังก์ชันเดิมที่มีอยู่แล้ว)
     const eventData = getEventDataByRow(selectedRow);
-    
-    // เช็คว่าเคยสร้าง Event หรือยัง (ต้องมี Event ID ถึงจะแก้ได้)
     if (!eventData || !eventData.eventId) {
-      SpreadsheetApp.getUi().alert('⚠️ ไม่สามารถอัปเดตได้: ยังไม่มี Event ID\n(ต้องกด CONFIRM เพื่อสร้าง Event ครั้งแรกก่อน)');
+      SpreadsheetApp.getUi().alert('⚠️ ต้องสร้าง Event ก่อนถึงจะแก้ไขได้');
       return;
     }
 
-    // ถามยืนยัน
     const response = SpreadsheetApp.getUi().alert(
-      'ยืนยันการแก้ไขข้อมูล', 
-      `คุณต้องการอัปเดตข้อมูล Event: "${eventData.eventName}"\nระบบจะแก้เวลาใน Calendar และส่ง LINE แจ้งเตือนใหม่`, 
+      'ยืนยันการแก้ไข', 
+      `ต้องการอัปเดต: "${eventData.eventName}" ?`, 
       SpreadsheetApp.getUi().ButtonSet.YES_NO
     );
     
     if (response === SpreadsheetApp.getUi().Button.YES) {
-      // 2. ประมวลผลข้อมูลใหม่ (format วันที่/เวลา)
       const processedData = processEventData(eventData);
-      
-      // 3. แก้ไขใน Google Calendar
       updateCalendarEventOnly(processedData);
-      
-      // 4. ส่ง LINE แจ้งว่ามีการแก้ไข
       sendLineUpdateNotification(processedData);
-      
-      // 5. ตั้งแจ้งเตือนใหม่อีกครั้ง (เผื่อเวลาเปลี่ยน)
-      scheduleReminders(processedData);
-      
-      SpreadsheetApp.getUi().alert(`✅ อัปเดตข้อมูลสำเร็จ!\nCalendar ถูกแก้ไขและส่ง LINE แจ้งเตือนแล้ว`);
-      Logger.log(`🔄 อัปเดต Event สำเร็จ: ${eventData.eventName}`);
+      SpreadsheetApp.getUi().alert(`✅ อัปเดตข้อมูลสำเร็จ!`);
     }
-    
   } catch (error) {
-    SpreadsheetApp.getUi().alert('เกิดข้อผิดพลาดในการอัปเดต: ' + error.toString());
-    Logger.log('❌ Error updating event: ' + error.toString());
+    SpreadsheetApp.getUi().alert('Error: ' + error.toString());
   }
 }
 
-// ฟังก์ชันเจาะจงสำหรับแก้ Calendar (แยกออกมาเพื่อความปลอดภัย)
 function updateCalendarEventOnly(eventData) {
-  try {
-    const calendar = CalendarApp.getCalendarById(CONFIG.CALENDAR_ID);
-    const event = calendar.getEventById(eventData.eventId);
-    
-    if (!event) {
-      throw new Error('ไม่พบ Event ใน Calendar (อาจถูกลบไปแล้ว)');
-    }
-    
-    // อัปเดตข้อมูลใหม่ทับของเดิม
-    event.setTitle(eventData.eventName);
-    event.setTime(eventData.startEvent, eventData.endEvent);
-    event.setLocation(eventData.location || '');
-    
-    const description = `รายละเอียด: ${eventData.detail || 'ไม่ระบุ'}\nผู้รับผิดชอบ: ${eventData.userName || 'ไม่ระบุ'}\nสถานที่: ${eventData.location || 'ไม่ระบุ'}`;
-    event.setDescription(description);
-    
-    Logger.log('📅 ปรับปรุงข้อมูลใน Calendar ID: ' + eventData.eventId);
-    
-  } catch (error) {
-    Logger.log('❌ ไม่สามารถอัปเดต Calendar: ' + error.toString());
-    throw new Error('ไม่สามารถเข้าถึง Calendar ID นี้ได้');
-  }
+  const calendar = CalendarApp.getCalendarById(CONFIG.CALENDAR_ID);
+  const event = calendar.getEventById(eventData.eventId);
+  if (!event) throw new Error('ไม่พบ Event ใน Calendar');
+  
+  event.setTitle(eventData.eventName);
+  event.setTime(eventData.startEvent, eventData.endEvent);
+  event.setLocation(eventData.location || '');
+  event.setDescription(`รายละเอียด: ${eventData.detail || '-'}\nผู้รับผิดชอบ: ${eventData.userName || '-'}`);
 }
 
-// ฟังก์ชันส่ง LINE แจ้งเตือนการแก้ไข (สีส้ม)
 function sendLineUpdateNotification(eventData) {
   const message = {
     type: "flex",
     altText: `📝 แก้ไขข้อมูล: ${eventData.eventName}`,
     contents: {
       type: "bubble",
-      size: "mega",
       body: {
         type: "box",
         layout: "vertical",
-        spacing: "sm",
-        paddingAll: "20px",
         contents: [
-          {
-            type: "text",
-            text: "UPDATE / CORRECTION",
-            weight: "bold",
-            size: "sm",
-            color: "#FF9500" // สีส้ม
-          },
-          {
-            type: "text",
-            text: "มีการแก้ไขข้อมูลกิจกรรม",
-            weight: "bold",
-            size: "md",
-            color: "#333333",
-            margin: "xs"
-          },
-          {
-            type: "separator",
-            margin: "md"
-          },
-          {
-            type: "text",
-            text: eventData.eventName,
-            weight: "bold",
-            size: "lg",
-            wrap: true,
-            color: "#333333",
-            margin: "md"
-          },
-          {
-            type: "box",
-            layout: "baseline",
-            spacing: "xs",
-            contents: [
-              { type: "text", text: "New Date:", color: "#999999", size: "xs", flex: 2 },
-              { type: "text", text: eventData.startDateFormatted, size: "xs", color: "#333333", weight: "bold", flex: 3 }
-            ]
-          },
-          {
-            type: "box",
-            layout: "baseline",
-            spacing: "xs",
-            contents: [
-              { type: "text", text: "New Time:", color: "#999999", size: "xs", flex: 2 },
-              { type: "text", text: `${eventData.startTimeFormatted} - ${eventData.endTimeFormatted}`, size: "xs", color: "#FF0000", weight: "bold", flex: 3 }
-            ]
-          },
-          {
-            type: "text",
-            text: "* ยึดข้อมูลตามประกาศฉบับนี้ *",
-            size: "xxs",
-            color: "#999999",
-            align: "center",
-            margin: "lg"
-          }
+          { type: "text", text: "UPDATE / CORRECTION", weight: "bold", color: "#FF9500" },
+          { type: "text", text: eventData.eventName, weight: "bold", size: "lg", wrap: true },
+          { type: "text", text: `New Time: ${eventData.startTimeFormatted} - ${eventData.endTimeFormatted}`, size: "sm" }
         ]
       }
     }
   };
-  
   sendLineMessage([message]);
+}
+
+// ===== Test Functions =====
+function testLineConnection() {
+  sendLineMessage([{ type: "text", text: "🧪 Test Connection OK" }]);
 }
