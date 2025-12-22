@@ -134,6 +134,43 @@ const SYSTEM_CONFIG = {
 };
 
 /**
+ * 💡 NEW: Calendar Notification Configuration
+ * การตั้งค่าสำหรับระบบแจ้งเตือน Calendar
+ */
+const CALENDAR_CONFIG = {
+  // ตั้งค่าพื้นฐาน
+  TEST_MODE: false, // ถ้า true จะไม่ยิง LINE จริง
+  TIMEZONE: 'Asia/Bangkok',
+  
+  // Sensitive Data (ดึงจาก Script Properties)
+  CALENDAR_ID: PROPERTIES.getProperty('CALENDAR_ID'),
+  LINE_ACCESS_TOKEN: PROPERTIES.getProperty('CALENDAR_LINE_ACCESS_TOKEN'), // Token สำหรับยิงเข้ากลุ่ม
+  LINE_GROUP_ID: PROPERTIES.getProperty('CALENDAR_LINE_GROUP_ID'),         // Group ID ที่จะส่งแจ้งเตือน
+  
+  // การตั้งค่าคอลัมน์ใน Sheet (0-based index)
+  COLUMNS: {
+    EVENT_NAME: 0,      // Col A
+    DETAIL: 1,          // Col B
+    USER_NAME: 2,       // Col C
+    LOCATION: 3,        // Col D
+    START_DATE: 4,      // Col E
+    START_TIME: 5,      // Col F
+    END_DATE: 6,        // Col G
+    END_TIME: 7,        // Col H
+    CONFIRM_STATUS: 8,  // Col I
+    CREATION_STATUS: 9, // Col J
+    EVENT_ID: 10        // Col K
+  },
+  
+  // ค่าสถานะต่างๆ
+  STATUS: {
+    PENDING: 'PENDING',     // รอการยืนยัน
+    CONFIRMED: 'CONFIRMED', // ยืนยันแล้ว ให้ส่งแจ้งเตือน
+    CREATED: 'CREATED'      // สร้างใน Calendar แล้ว
+  }
+};
+
+/**
  * Get configuration value
  * @param {string} path - Dot notation path (e.g., 'LINE_CONFIG.API_ENDPOINTS.PUSH_MESSAGE')
  * @return {*} Configuration value
@@ -167,7 +204,11 @@ function validateConfig() {
     const checks = [
       { name: 'LINE Access Token (via Properties)', value: LINE_CONFIG.CHANNEL_ACCESS_TOKEN },
       { name: 'Spreadsheet ID (via Properties)', value: SHEET_CONFIG.SPREADSHEET_ID },
-      { name: 'Sheet Names', value: Object.keys(SHEET_CONFIG.SHEETS).length > 0 }
+      { name: 'Sheet Names', value: Object.keys(SHEET_CONFIG.SHEETS).length > 0 },
+      // 💡 NEW: Validate Calendar Config
+      { name: 'Calendar ID', value: CALENDAR_CONFIG.CALENDAR_ID },
+      { name: 'Calendar LINE Token', value: CALENDAR_CONFIG.LINE_ACCESS_TOKEN },
+      { name: 'Calendar Group ID', value: CALENDAR_CONFIG.LINE_GROUP_ID }
     ];
     
     let allValid = true;
@@ -226,6 +267,11 @@ function testConfiguration() {
   Logger.log('\n🛢️ Oil Report Configuration:');
   Logger.log(`  Goal: ${SYSTEM_CONFIG.DEFAULTS.OIL_REPORT_GOAL}`);
   Logger.log(`  Async Delay: ${SYSTEM_CONFIG.ASYNC_DELAY_MS}ms`);
+
+  Logger.log('\n📅 Calendar Configuration:');
+  Logger.log(`  Calendar ID: ${CALENDAR_CONFIG.CALENDAR_ID ? '✅ Loaded' : '❌ Missing'}`);
+  Logger.log(`  LINE Token: ${CALENDAR_CONFIG.LINE_ACCESS_TOKEN ? '✅ Loaded' : '❌ Missing'}`);
+  Logger.log(`  Group ID: ${CALENDAR_CONFIG.LINE_GROUP_ID ? '✅ Loaded' : '❌ Missing'}`);
 
   Logger.log('\n🔍 Running Validation:');
   validateConfig();

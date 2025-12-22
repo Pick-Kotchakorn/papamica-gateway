@@ -521,3 +521,25 @@ function processFormSubmission(formData) {
     throw new Error('บันทึกข้อมูลไม่สำเร็จ: ' + error.message);
   }
 }
+
+// ===== Menu/Toolbar Functions =====
+
+// ฟังก์ชันสร้างเมนู (ที่คุณมีอยู่แล้ว)
+function createCalendarMenu() { 
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('📅 Event Manager')
+    .addItem('⏳ ตั้งสถานะ PENDING', 'setPendingStatusForSelectedRow')
+    .addItem('✅ ยืนยัน CONFIRMED', 'setConfirmedStatusForSelectedRow')
+    .addSeparator()
+    .addItem('🛠️ อัปเดตข้อมูล (แก้ไข)', 'updateEventForSelectedRow')
+    .addSeparator()
+    .addItem('📋 ประมวลผล Event ทั้งหมด', 'processAllEvents')
+    .addItem('🧪 ทดสอบ LINE', 'testLineConnection')
+    .addItem('🗑️ ลบการแจ้งเตือนทั้งหมด', 'clearAllReminders')
+    .addToUi();
+}
+
+// 👇 เพิ่มส่วนนี้เข้าไปครับ เพื่อให้เมนูทำงานตอนเปิด Sheet
+function onOpen() {
+  createCalendarMenu();
+}
