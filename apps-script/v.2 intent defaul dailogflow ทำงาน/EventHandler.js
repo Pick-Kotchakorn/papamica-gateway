@@ -139,44 +139,24 @@ function handleTextMessage(event) {
         
       }
       // ====================================================
-      // 🟢 Default Case: จัดการ Intent ทั่วไป (อัปเดตใหม่)
+      // 🟢 Default Case
       // ====================================================
       else if (dfResponse.messages) { 
-        
-        // 🛑 IGNORE LIST: รายชื่อ Intent ที่ต้องการให้เงียบ (ไม่ตอบกลับ)
-        // ใส่ชื่อ Intent ตามที่ตั้งใน Dialogflow Console ได้เลย
-        const IGNORED_INTENTS = [
-            'Default Fallback Intent',  // ปิดเมื่อบอทไม่เข้าใจ
-            // 'Small Talk',
-            // 'Welcome Intent'
-        ];
-
-        // ตรวจสอบว่า Intent นี้อยู่ในรายการที่ต้องเงียบหรือไม่?
-        if (IGNORED_INTENTS.includes(intentName)) {
-             // 🤐 เงียบกริบ: ไม่ส่งข้อความกลับ แต่บันทึก Log ไว้
-             Logger.log(`🤐 Silenced Intent: ${intentName}`);
-             intent = intentName;
-             aiResponse = '[Silenced Mode]'; 
-        } 
-        else {
-             // ✅ Intent อื่นๆ: ให้ตอบกลับตามปกติ
-             let msgString = JSON.stringify(dfResponse.messages);
-             if (msgString.includes('###USER_ID###')) {
-                msgString = msgString.replace(/###USER_ID###/g, userId);
-             }
-             const finalMessages = JSON.parse(msgString);
-             sendLineMessages(userId, { messages: finalMessages }, replyToken);
-             
-             intent = intentName || 'dialogflow.general';
-             aiResponse = '[Dialogflow Response]';
+        let msgString = JSON.stringify(dfResponse.messages);
+        if (msgString.includes('###USER_ID###')) {
+           msgString = msgString.replace(/###USER_ID###/g, userId);
         }
+        const finalMessages = JSON.parse(msgString);
+        sendLineMessages(userId, { messages: finalMessages }, replyToken);
+        
+        intent = intentName || 'dialogflow.general';
+        aiResponse = '[Dialogflow Response]';
       }
       
     } else {
-      // 💡 ปิดข้อความ Maintenance เพื่อให้เงียบสนิท (กรณีปิด Feature Flag)
-      // pushSimpleMessage(userId, SYSTEM_CONFIG.MESSAGES.MAINTENANCE);
-      intent = 'manual.silent';
-      aiResponse = '[Silent Mode]';
+      pushSimpleMessage(userId, SYSTEM_CONFIG.MESSAGES.MAINTENANCE);
+      intent = 'manual.maintenance';
+      aiResponse = SYSTEM_CONFIG.MESSAGES.MAINTENANCE;
     }
     
     updateFollowerInteraction(userId);
@@ -191,8 +171,7 @@ function handleTextMessage(event) {
     
   } catch (error) {
     Logger.log(`❌ Error in handleTextMessage: ${error.message}`);
-    // ปิดข้อความ Error ด้วย เพื่อให้เงียบสนิท
-    // pushSimpleMessage(userId, SYSTEM_CONFIG.MESSAGES.ERROR);
+    pushSimpleMessage(userId, SYSTEM_CONFIG.MESSAGES.ERROR);
   }
 }
 

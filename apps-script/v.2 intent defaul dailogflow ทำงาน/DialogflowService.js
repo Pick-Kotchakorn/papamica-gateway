@@ -145,7 +145,7 @@ function parseDialogflowMessages(queryResult) {
 
   // 4️⃣ Default fallback
   if (messages.length === 0) { 
-    messages.push({ type: 'text', text: 'ตู้ด ตู้ด ตู้ด เดี๋ยวตอบกลับให้นะครับ' });
+    messages.push({ type: 'text', text: 'ขอโทษครับ ไม่เข้าใจคำถาม' });
   }
 
   Logger.log('📤 Parsed Messages: ' + JSON.stringify(messages));

@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" charset="utf-8"></script>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body { 
+        font-family: 'Kanit', sans-serif;
+        background: #f5f5f5;
+        min-height: 100vh;
+        padding: 0;
+      }
+      
+      .main-container {
+        max-width: 480px;
+        margin: 0 auto;
+        background: white;
+        min-height: 100vh;
+        position: relative;
+      }
+      
+      /* Header - สีดำทอง */
+      .header-section {
+        background: #1C1C1C;
+        padding: 30px 20px;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      
+      .header-title {
+        color: #E6C27A;
+        font-size: 1.5em;
+        font-weight: 700;
+        margin: 10px 0 5px 0;
+      }
+      
+      .header-subtitle {
+        color: #BFAF7A;
+        font-size: 0.75em;
+        letter-spacing: 1px;
+      }
+      
+      /* Form Section */
+      .form-section {
+        padding: 0 20px 25px 20px;
+      }
+      
+      .form-group {
+        margin-bottom: 20px;
+      }
+      
+      .form-label {
+        font-weight: 600;
+        color: #2d3748;
+        margin-bottom: 8px;
+        display: block;
+        font-size: 0.95em;
+      }
+      
+      .label-icon {
+        margin-right: 6px;
+      }
+      
+      .form-select,
+      .form-control {
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-size: 0.95em;
+        width: 100%;
+        background-color: #f8fafc;
+        font-family: 'Kanit', sans-serif;
+        transition: all 0.2s;
+      }
+      
+      .form-select:focus,
+      .form-control:focus {
+        border-color: #E6C27A;
+        background-color: white;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(230, 194, 122, 0.1);
+      }
+      
+      /* File Input */
+      .file-input-wrapper {
+        position: relative;
+      }
+      
+      .file-input-wrapper input[type=file] {
+        position: absolute;
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+        z-index: 2;
+      }
+      
+      .file-input-label {
+        display: block;
+        padding: 25px 20px;
+        background: #f8fafc;
+        border: 2px dashed #cbd5e0;
+        border-radius: 10px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      
+      .file-input-wrapper:hover .file-input-label {
+        border-color: #E6C27A;
+        background: #fffbf5;
+      }
+      
+      .file-icon {
+        font-size: 2.2em;
+        margin-bottom: 8px;
+        display: block;
+      }
+      
+      .file-text {
+        color: #64748b;
+        font-size: 0.9em;
+      }
+      
+      .file-selected {
+        color: #E6C27A;
+        font-weight: 600;
+        margin-top: 8px;
+        font-size: 0.85em;
+        display: none;
+      }
+      
+      .file-selected.show {
+        display: block;
+      }
+      
+      .form-text {
+        color: #94a3b8;
+        font-size: 0.8em;
+        margin-top: 6px;
+        display: block;
+      }
+      
+      /* Submit Button */
+      .btn-submit {
+        width: 100%;
+        padding: 14px;
+        font-size: 1.05em;
+        font-weight: 600;
+        border: none;
+        border-radius: 10px;
+        background: #06C755;
+        color: white;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 4px 12px rgba(6, 199, 85, 0.3);
+        margin-top: 5px;
+        font-family: 'Kanit', sans-serif;
+      }
+      
+      .btn-submit:hover:not(:disabled) {
+        background: #05b34c;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(6, 199, 85, 0.4);
+      }
+      
+      /* Secondary Button for Success Screen */
+      .btn-secondary-custom {
+        background: #f1f5f9;
+        color: #475569;
+        box-shadow: none;
+        border: 1px solid #cbd5e0;
+      }
+      
+      .btn-secondary-custom:hover {
+        background: #e2e8f0;
+        transform: translateY(-1px);
+      }
+      
+      .btn-submit:active:not(:disabled) {
+        transform: translateY(0);
+      }
+      
+      .btn-submit:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      
+      /* Loading Overlay */
+      .loading-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.95);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+      
+      .loading-overlay.show {
+        display: flex;
+      }
+      
+      .spinner {
+        width: 45px;
+        height: 45px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #E6C27A;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      .loading-text {
+        margin-top: 15px;
+        font-size: 1em;
+        font-weight: 600;
+        color: #2D3748;
+      }
+
+      /* ✨ Success Screen */
+      .success-screen {
+        display: none;
+        text-align: center;
+        padding: 60px 30px;
+        animation: fadeIn 0.5s ease-out;
+      }
+      
+      .success-icon-box {
+        width: 100px;
+        height: 100px;
+        background: #dcfce7;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 25px;
+      }
+      
+      .success-icon-emoji {
+        font-size: 3.5em;
+      }
+      
+      .success-title {
+        color: #166534;
+        font-size: 1.6em;
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+      
+      .success-desc {
+        color: #64748b;
+        font-size: 1em;
+        margin-bottom: 40px;
+        line-height: 1.6;
+      }
+      
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      
+      @media (max-width: 576px) {
+        .header-title { font-size: 1.3em; }
+        .form-section { padding: 0 15px 20px 15px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="main-container">
+      
+      <div id="contentWrapper">
+        <div class="header-section">
+          <h1 class="header-title">รายงานยอดขายน้ำมัน</h1>
+          <p class="header-subtitle">OIL SALES REPORT</p>
+        </div>
+        
+        <div class="form-section">
+          <form id="oilForm">
+            <input type="hidden" id="userId" name="userId" value="<?= userId ?>">
+
+            <div class="form-group">
+              <label class="form-label">
+                <span class="label-icon">📍</span>สาขา
+              </label>
+              <select class="form-select" name="branch" required>
+                <option value="" selected disabled>กรุณาเลือกสาขา</option>
+                <option value="EMQ">EmQuartier</option>
+                <option value="ONB">One Bangkok</option>
+                <option value="KSQ">KingsQuare</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label"><span class="label-icon">📝</span>ประเภทรายการ</label>
+              <div style="display: flex; gap: 10px;">
+                <input type="radio" class="btn-check" name="type" id="typeDeposit" value="deposit" checked style="display:none">
+                <label class="form-control" for="typeDeposit" id="labelDeposit" style="text-align: center; cursor: pointer; border: 2px solid #06C755; background-color: #eafff0; color: #06C755; font-weight: bold;">
+                  📥 ยอดขาย (เข้า)
+                </label>
+                
+                <input type="radio" class="btn-check" name="type" id="typeWithdraw" value="withdraw" style="display:none">
+                <label class="form-control" for="typeWithdraw" id="labelWithdraw" style="text-align: center; cursor: pointer; border: 2px solid #e2e8f0; color: #64748b;">
+                  📤 เบิกจ่าย (ออก)
+                </label>
+              </div>
+            </div>
+
+            <style>
+              input[name="type"]:checked + label#labelDeposit {
+                background-color: #eafff0; border-color: #06C755; color: #06C755;
+              }
+              input[name="type"]:not(:checked) + label#labelDeposit {
+                background-color: white; border-color: #e2e8f0; color: #64748b;
+              }
+              
+              input[name="type"]:checked + label#labelWithdraw {
+                background-color: #fff5f5; border-color: #ef4444; color: #ef4444; font-weight: bold;
+              }
+              input[name="type"]:not(:checked) + label#labelWithdraw {
+                background-color: white; border-color: #e2e8f0; color: #64748b; font-weight: normal;
+              }
+            </style>
+            <div class="form-group">
+              <label class="form-label">
+                <span class="label-icon">💰</span>จำนวนเงิน
+              </label>
+              <input 
+                type="number" 
+                step="0.01" 
+                class="form-control" 
+                name="amount" 
+                placeholder="กรอกจำนวนเงิน เช่น 1500.50" 
+                required
+              >
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">
+                <span class="label-icon">📸</span>อัปโหลดรูปภาพสลิป
+              </label>
+              <div class="file-input-wrapper">
+                <input 
+                  type="file" 
+                  name="imageFile" 
+                  id="imageFile" 
+                  accept="image/*" 
+                  required
+                >
+                <label class="file-input-label" id="fileLabel">
+                  <span class="file-icon">📷</span>
+                  <div class="file-text">คลิกเพื่อเลือกรูปภาพ</div>
+                  <div class="file-selected" id="fileName"></div>
+                </label>
+              </div>
+              <small class="form-text">รองรับไฟล์ .jpg, .png (ขนาดไม่เกิน 5MB)</small>
+            </div>
+            
+            <button type="submit" id="submitBtn" class="btn-submit">
+              ✓ ยืนยันการรายงาน
+            </button>
+          </form>
+        </div>
+      </div>
+      
+      <div id="successScreen" class="success-screen">
+        <div class="success-icon-box">
+          <div class="success-icon-emoji">🎉</div>
+        </div>
+        <h2 class="success-title">บันทึกข้อมูลสำเร็จ!</h2>
+        <p class="success-desc">
+          ขอบคุณสำหรับการรายงาน<br>
+          ระบบได้บันทึกยอดขายและสลิปเรียบร้อยแล้ว
+        </p>
+        <button type="button" class="btn-submit btn-secondary-custom" onclick="closeApp()">
+          ปิดหน้าต่าง
+        </button>
+      </div>
+
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="spinner"></div>
+      <div class="loading-text">กำลังบันทึกข้อมูล...</div>
+    </div>
+
+    <script>
+      // ฟังก์ชันปิดหน้าต่าง
+      function closeApp() {
+        try {
+          if (typeof liff !== 'undefined') {
+            if (liff.isInClient()) {
+                liff.closeWindow();
+                return;
+            }
+          }
+          window.open('','_self').close();
+          window.close();
+        } catch (e) {
+          console.log('Cannot close window:', e);
+          alert('กรุณากดปิดหน้าต่างที่มุมบนขวาของแอป');
+        }
+      }
+      
+      document.addEventListener('DOMContentLoaded', function() {
+        if (typeof liff !== 'undefined') {
+            liff.init({ liffId: "" }).catch(err => { console.log('LIFF init error (Optional)', err); });
+        }
+      });
+
+      document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('oilForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const imageInput = document.getElementById('imageFile');
+        const fileName = document.getElementById('fileName');
+        const fileLabel = document.getElementById('fileLabel');
+        const contentWrapper = document.getElementById('contentWrapper');
+        const successScreen = document.getElementById('successScreen');
+
+        // ✅ User ID Fix: ดึง userId จาก URL มาใส่ใน input hidden
+        google.script.url.getLocation(function(location) {
+          var urlUserId = location.parameter.userId;
+          var inputField = document.getElementById('userId');
+          
+          if (urlUserId && (!inputField.value || inputField.value === '' || inputField.value === 'undefined')) {
+             inputField.value = urlUserId;
+             console.log("UserID filled from URL parameter: " + urlUserId);
+          }
+        });
+
+        // Handle file input
+        imageInput.addEventListener('change', function(e) {
+          if (e.target.files && e.target.files.length > 0) {
+            const file = e.target.files[0];
+            fileName.textContent = '✓ ' + file.name;
+            fileName.classList.add('show');
+            fileLabel.style.borderColor = '#E6C27A';
+            fileLabel.style.background = '#fffbf5';
+          }
+        });
+
+        // Handle form submission
+        form.addEventListener('submit', function(e) {
+          e.preventDefault();
+          
+          submitBtn.disabled = true;
+          loadingOverlay.classList.add('show');
+
+          const file = imageInput.files[0];
+          
+          if (!file) {
+            alert('กรุณาเลือกรูปภาพ');
+            submitBtn.disabled = false;
+            loadingOverlay.classList.remove('show');
+            return;
+          }
+
+          const reader = new FileReader();
+          
+          reader.onload = function(e) {
+            const fileData = {
+              base64: e.target.result.split(',')[1],
+              mimeType: file.type,
+              fileName: file.name
+            };
+
+            const formData = {
+              userId: document.getElementById('userId').value, 
+              branch: form.branch.value,
+              amount: form.amount.value,
+              // ✅ ตอนนี้ส่วนนี้จะทำงานได้ถูกต้องแล้ว เพราะมี input name="type" อยู่ใน HTML แล้ว
+              type: document.querySelector('input[name="type"]:checked').value,
+              imageData: fileData
+            };
+
+            google.script.run
+              .withSuccessHandler(function(response) {
+                loadingOverlay.classList.remove('show');
+                contentWrapper.style.display = 'none';
+                successScreen.style.display = 'block';
+                form.reset();
+              })
+              .withFailureHandler(function(error) {
+                loadingOverlay.classList.remove('show');
+                alert('❌ เกิดข้อผิดพลาด: ' + error.message);
+                submitBtn.disabled = false;
+              })
+              .processFormSubmission(formData);
+          };
+          
+          reader.onerror = function() {
+            alert('❌ ไม่สามารถอ่านไฟล์ได้');
+            submitBtn.disabled = false;
+            loadingOverlay.classList.remove('show');
+          };
+          
+          reader.readAsDataURL(file);
+        });
+      });
+    </script>
+  </body>
+</html>
