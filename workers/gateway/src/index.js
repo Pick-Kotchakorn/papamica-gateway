@@ -2,8 +2,11 @@
 
 import { validateSignature } from '@line/bot-sdk';
 
-// 📌 GAS Endpoint (Primary)
-const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzSksjKBT_LoifYrKdtuBZ0b8q-gVThIJ2v7M286N98sYdegrMIMDQM8oudXeobrKQL/exec';
+// 📌 GAS Endpoint 1 (Original)
+const GAS_ENDPOINT_1 = 'https://script.google.com/macros/s/AKfycbzSksjKBT_LoifYrKdtuBZ0b8q-gVThIJ2v7M286N98sYdegrMIMDQM8oudXeobrKQL/exec';
+
+// 📌 GAS Endpoint 2 (New) -> อันนี้คืออันที่คุณขอเพิ่มครับ
+const GAS_ENDPOINT_2 = 'https://script.google.com/macros/s/AKfycbzvSzJSI_f0LgCMCfvLzZwylcPp7YLLmevGdTtehkUDHWbvuGkBNWIpEDhOGd2lVt2g/exec';
 
 // 📌 Webhook.site Endpoint (Debug/Monitor)
 const WEBHOOK_SITE_URL = 'https://webhook.site/581662c1-e473-45d4-bf27-b8322220f377';
@@ -54,17 +57,22 @@ export default {
       ctx.waitUntil(saveUserMessage(env.DB, eventData));
     }
 
-    // 🎯 ส่งต่อไปยัง Multiple Endpoints
+    // 🎯 ส่งต่อไปยัง Multiple Endpoints (รวมทั้งหมด 3 Links)
     const endpoints = [
       { 
-        name: 'GAS', 
-        url: env.GAS_ENDPOINT || GAS_ENDPOINT,
+        name: 'GAS Primary', 
+        url: env.GAS_ENDPOINT || GAS_ENDPOINT_1,
+        enabled: true
+      },
+      { 
+        name: 'GAS Secondary', // เพิ่มใหม่
+        url: env.GAS_ENDPOINT_2 || GAS_ENDPOINT_2,
         enabled: true
       },
       { 
         name: 'Webhook.site', 
         url: env.WEBHOOK_SITE_URL || WEBHOOK_SITE_URL,
-        enabled: env.ENABLE_WEBHOOK_SITE !== 'false' // ปิดได้ด้วย env var
+        enabled: env.ENABLE_WEBHOOK_SITE !== 'false'
       }
     ];
 
